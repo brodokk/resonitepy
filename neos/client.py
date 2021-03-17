@@ -34,11 +34,12 @@ class Client:
 
     @property
     def headers(self) -> dict:
-        return {"Authorization": f"neos {self.userId}:{self.token}"}
-
-    @property
-    def inventoryRoot(self) -> NeosDirectory:
-        return NeosDirectory()
+        default = {"User-Agent": "neos.py/{__version__}"}
+        if not self.userId or not self.token:
+            print("WARNING: headers sections not set. this might throw an error soon...")
+            return default
+        default["Authorization"] = f"neos {self.userId}:{self.token}"
+        return default
 
     @staticmethod
     def processRecordList(data: List[dict]):
@@ -86,7 +87,7 @@ class Client:
                 f,
             )
 
-    async def getUserData(self, user=None) -> Dict:
+    async def getUserData(self, user: str = None) -> NeosUser:
         if user is None:
             user = self.userId
         async with ClientSession(headers=self.headers) as session:
@@ -96,6 +97,21 @@ class Client:
                     raise ValueError(responce["message"])
                 req.raise_for_status()
                 return dacite.from_dict(NeosUser, await req.json(), DACITE_CONFIG)
+
+    async def getFriends(self):
+        """
+        returns the friends you have.
+
+        Note: does not create friends out of thin air. you need to do that yourself.
+        """
+        async with ClientSession(headers=self.headers) as session:
+            async with session.get(f"{CLOUDX_NEOS_API}/users/{self.userId}/friends") as req:
+                responce = await req.json()
+                if "message" in responce:
+                    raise ValueError(responce["message"])
+                req.raise_for_status()
+                print(responce)
+                return [dacite.from_dict(NeosFriend, user, DACITE_CONFIG) for user in responce]
 
     async def getInventory(self) -> List[NeosRecord]:
         """

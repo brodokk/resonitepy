@@ -131,3 +131,25 @@ class NeosUser:
     tags: Optional[List[str]] = field(default_factory=list)
 
 
+@dataclass
+class UserStatusData:
+    onlineStatus: str  # TODO: find enum values
+    lastStatusChange: datetime
+    currentSessionAccessLevel: int  # TODO: Find Enum Values
+    currentSessionHidden: bool
+    currentHosting: bool
+    compatibilityHash: str
+    neosVersion: str
+    # publicRSAKey: dict  investigate usefulness
+    latestMessageTime: datetime
+
+
+@dataclass
+class NeosFriend:
+    id: str
+    friendUsername: str
+    friendStatus: str  # TODO: find enum values
+    isAccepted: bool
+    userStatus: UserStatusData
+    profile: ProfileData
+    latestMessageTime: datetime
