@@ -1,9 +1,10 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from neos.secrets import generate
-from typing import List, Optional
 from pathlib import PureWindowsPath
+from typing import List, Optional
+
+from neos.secrets import generate
 
 
 class RecordType(Enum):
@@ -130,5 +131,3 @@ class NeosUser:
     tags: Optional[List[str]] = field(default_factory=list)
 
 
-class NoTokenError(Exception):
-    pass

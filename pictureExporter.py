@@ -1,10 +1,10 @@
-from datetime import datetime
-from neos import client, classes
 import asyncio
-from os import path
 import json
+from datetime import datetime
 from getpass import getpass
+from os import path
 
+from neos import classes, client
 
 c = client.Client()
 

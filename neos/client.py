@@ -1,18 +1,19 @@
 import dataclasses
-from datetime import datetime
 import json
+from datetime import datetime
 from os import path as OSpath
 from typing import Dict, List
 from urllib.parse import urlparse
+
 import dacite
 from aiohttp import ClientSession
-
 from dateutil.parser import isoparse
 
-from .classes import NeosDirectory, NeosLink, NeosRecord, NoTokenError, RecordType, typeMapping, LoginDetails, NeosUser
-
+from . import __version__
+from .classes import (LoginDetails, NeosDirectory, NeosFriend, NeosLink,
+                      NeosRecord, NeosUser, RecordType, typeMapping)
 from .endpoints import CLOUDX_NEOS_API
-
+from .exceptions import NoTokenError
 
 DACITE_CONFIG = dacite.Config(
     cast=[RecordType],
