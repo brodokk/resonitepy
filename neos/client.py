@@ -22,6 +22,7 @@ from .classes import (
 )
 from .endpoints import CLOUDX_NEOS_API
 from .exceptions import NoTokenError
+from neos import exceptions
 
 DACITE_CONFIG = dacite.Config(
     cast=[RecordType],
@@ -154,9 +155,13 @@ class Client:
         given a link type record, will return it's directory. directoy can be passed to getDirectory
         """
         async with ClientSession(headers=self.headers) as session:
-            user, record = link.assetUri.path  # TODO: better
+            _, user, record = link.assetUri.path.split("/")  # TODO: better
             async with session.get(
-                f"{CLOUDX_NEOS_API}/users/{user}/{record}",
+                f"{CLOUDX_NEOS_API}/users/{user}/records/{record}",
             ) as req:
-                req.raise_for_status()
+                try:
+                    req.raise_for_status()
+                except Exception as e:
+                    raise exceptions.FolderNotFound(**e)
+
                 return dacite.from_dict(NeosDirectory, await req.json(), DACITE_CONFIG)

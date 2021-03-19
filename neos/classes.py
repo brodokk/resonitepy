@@ -43,8 +43,8 @@ class NeosLink(NeosRecord):
 class NeosDirectory(NeosRecord):
     lastModifyingMachineId: str
     ownerName: str
-    tags: List[str] = field(default_factory=list)
-    creationTime: datetime
+    tags: List[str]
+    creationTime: Optional[datetime]
 
     @property
     def content_path(self) -> str:
@@ -56,7 +56,7 @@ class NeosObject(NeosRecord):
     assetUri: str
     lastModifyingMachineId: str
     ownerName: str
-    tags: List[str] = field(default_factory=list)
+    tags: List[str]
     creationTime: datetime
 
 
@@ -81,7 +81,7 @@ class LoginDetails:
 @dataclass
 class ProfileData:
     iconUrl: Optional[str]
-    tokenOutOut: Optional[List[str]] = field(default_factory=list)
+    tokenOutOut: Optional[List[str]]
 
 
 @dataclass

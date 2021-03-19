@@ -1,20 +1,32 @@
 import asyncio
 from datetime import datetime
 from getpass import getpass
+from typing import List
 
 from neos import classes, client, exceptions
 
 c = client.Client()
 
+objects: List[classes.NeosObject] = []
+
 
 async def printContents(node: classes.NeosDirectory, indentation=0):
+    tasks = []
     for item in await c.getDirectory(node):
-        print(f"{'    '*indentation}{item.name} - {item.recordType.value}")
+        # print(
+        #     f"{'    '*indentation}{item.name} - {item.recordType.value}  created by {item.lastModifyingUserId} at {item.lastModificationTime}"
+        # )
+        if isinstance(item, classes.NeosObject):
+            objects.append(item)
         if isinstance(item, classes.NeosDirectory):
-            await printContents(item, indentation + 1)
-        if isinstance(item, classes.NeosLink):
-            dir = await c.resolveLink(item)
-            await printContents(dir, indentation + 1)
+            loop = asyncio.get_event_loop()
+            tasks.append(loop.create_task(printContents(item, indentation + 1)))
+        # if isinstance(item, classes.NeosLink):
+        #     try:
+        #         dir = await c.resolveLink(item)
+        #     except
+        #     await printContents(dir, indentation + 1)
+    await asyncio.gather(*tasks)
 
 
 async def main():
@@ -45,7 +57,7 @@ async def main():
             print("saving token..")
             c.saveToken()
 
-    await printContents(await c.resolveLink(next(x for x in await c.getInventory() if x.name == "Essential Tools")))
+    await printContents(await c.resolveLink(next(x for x in await c.getInventory() if x.name == "Neos Essentials")))
     # todo: more stuff here
 
 
