@@ -6,6 +6,8 @@ from typing import List, Optional
 
 from neos.secrets import generate
 
+from urllib.parse import ParseResult
+
 
 class RecordType(Enum):
     OBJECT = "object"
@@ -32,10 +34,12 @@ class NeosRecord:
     ownerId: str
 
 
+@dataclass
 class NeosLink(NeosRecord):
-    assetUri: str
+    assetUri: ParseResult
 
 
+@dataclass
 class NeosDirectory(NeosRecord):
     lastModifyingMachineId: str
     ownerName: str
@@ -47,6 +51,7 @@ class NeosDirectory(NeosRecord):
         return str(PureWindowsPath(self.path, self.name))
 
 
+@dataclass
 class NeosObject(NeosRecord):
     assetUri: str
     lastModifyingMachineId: str

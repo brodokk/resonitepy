@@ -1,20 +1,20 @@
 import asyncio
-import json
 from datetime import datetime
 from getpass import getpass
-from os import path
 
-from neos import classes, client
+from neos import classes, client, exceptions
 
 c = client.Client()
 
 
-async def printContents(path="Inventory", indentation=0):
-    node = await c.getInventoryPath(path)
-    for item in node:
+async def printContents(node: classes.NeosDirectory, indentation=0):
+    for item in await c.getDirectory(node):
         print(f"{'    '*indentation}{item.name} - {item.recordType.value}")
         if isinstance(item, classes.NeosDirectory):
-            await printContents(path + "\\" + item.name, indentation + 1)
+            await printContents(item, indentation + 1)
+        if isinstance(item, classes.NeosLink):
+            dir = await c.resolveLink(item)
+            await printContents(dir, indentation + 1)
 
 
 async def main():
@@ -22,7 +22,7 @@ async def main():
     try:
         c.loadToken()
         have_auth = True
-    except classes.NoTokenError:
+    except exceptions.NoTokenError:
         pass
 
     if not have_auth:
@@ -45,7 +45,7 @@ async def main():
             print("saving token..")
             c.saveToken()
 
-    # await printContents()
+    await printContents(await c.resolveLink(next(x for x in await c.getInventory() if x.name == "Essential Tools")))
     # todo: more stuff here
 
 

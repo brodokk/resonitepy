@@ -3,15 +3,23 @@ import json
 from datetime import datetime
 from os import path as OSpath
 from typing import Dict, List
-from urllib.parse import urlparse
+from urllib.parse import ParseResult, urlparse
 
 import dacite
 from aiohttp import ClientSession
 from dateutil.parser import isoparse
 
 from . import __version__
-from .classes import (LoginDetails, NeosDirectory, NeosFriend, NeosLink,
-                      NeosRecord, NeosUser, RecordType, typeMapping)
+from .classes import (
+    LoginDetails,
+    NeosDirectory,
+    NeosFriend,
+    NeosLink,
+    NeosRecord,
+    NeosUser,
+    RecordType,
+    typeMapping,
+)
 from .endpoints import CLOUDX_NEOS_API
 from .exceptions import NoTokenError
 
@@ -19,6 +27,7 @@ DACITE_CONFIG = dacite.Config(
     cast=[RecordType],
     type_hooks={
         datetime: isoparse,
+        ParseResult: urlparse,
     },
 )
 
@@ -46,7 +55,8 @@ class Client:
         ret = []
         for raw_item in data:
             item = dacite.from_dict(NeosRecord, raw_item, DACITE_CONFIG)
-            ret.append(dacite.from_dict(typeMapping[item.recordType], raw_item, DACITE_CONFIG))
+            x = dacite.from_dict(typeMapping[item.recordType], raw_item, DACITE_CONFIG)
+            ret.append(x)
         return ret
 
     async def login(self, data: LoginDetails) -> None:
@@ -72,6 +82,8 @@ class Client:
                     self.userId = session["userId"]
                     self.expirey = expirey
                     self.secretMachineId = session["secretMachineId"]
+                else:
+                    raise NoTokenError
         else:
             raise NoTokenError
 
@@ -142,8 +154,9 @@ class Client:
         given a link type record, will return it's directory. directoy can be passed to getDirectory
         """
         async with ClientSession(headers=self.headers) as session:
+            user, record = link.assetUri.path  # TODO: better
             async with session.get(
-                f"{CLOUDX_NEOS_API}/users/{link.ownerId}/{link.id}",
+                f"{CLOUDX_NEOS_API}/users/{user}/{record}",
             ) as req:
                 req.raise_for_status()
                 return dacite.from_dict(NeosDirectory, await req.json(), DACITE_CONFIG)
