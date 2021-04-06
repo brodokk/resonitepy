@@ -6,7 +6,7 @@ from typing import Dict, List
 from urllib.parse import ParseResult, urlparse
 
 import dacite
-from aiohttp import ClientSession
+from aiohttp import ClientSession, ContentTypeError
 from dateutil.parser import isoparse
 
 from . import __version__
@@ -63,7 +63,10 @@ class Client:
     async def login(self, data: LoginDetails) -> None:
         async with ClientSession() as session:
             async with session.post(CLOUDX_NEOS_API + "/userSessions", json=dataclasses.asdict(data)) as req:
-                responce = await req.json()
+                try:
+                    responce = await req.json()
+                except ContentTypeError:
+                    raise ValueError(await req.text())
                 if "message" in responce:
                     raise ValueError(responce["message"])
                 req.raise_for_status()
