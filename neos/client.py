@@ -2,6 +2,7 @@ import dataclasses
 import json
 import logging
 from datetime import datetime
+from uuid import uuid4
 from os import path as OSpath
 from typing import Dict, List
 from urllib.parse import ParseResult, urlparse
@@ -19,17 +20,28 @@ from .classes import (
     NeosLink,
     NeosRecord,
     NeosUser,
+    NeosMessage,
+    NeosMessageType,
+    neosMessageTypeMapping,
     RecordType,
     recordTypeMapping,
     OnlineStatus,
     CurrentSessionAccessLevel,
     FriendStatus,
 )
+from .utils import nested_asdict_factory
+
 from .endpoints import CLOUDX_NEOS_API
 from neos import exceptions as neos_exceptions
 
 DACITE_CONFIG = dacite.Config(
-    cast=[RecordType, OnlineStatus, CurrentSessionAccessLevel, FriendStatus],
+    cast=[
+        NeosMessageType,
+        RecordType,
+        OnlineStatus,
+        CurrentSessionAccessLevel,
+        FriendStatus
+    ],
     type_hooks={
         datetime: isoparse,
         ParseResult: urlparse,
@@ -218,3 +230,30 @@ class Client:
             f"/users/{user}/records/{record}",
         )
         return dacite.from_dict(NeosDirectory, responce, DACITE_CONFIG)
+
+    def buildMessage(
+        self, sender_id: str, recipiend_id: str, msg: str
+    ) -> NeosMessage:
+        message_type = NeosMessageType.TEXT
+        builded_msg = {
+            'id': f'MSG-{uuid4()}',
+            'senderId': sender_id,
+            'ownerId': sender_id,
+            'sendTime': datetime.now().isoformat(),
+            'recipientId': recipiend_id,
+            'messageType': message_type,
+            'content': msg,
+        }
+        return dacite.from_dict(NeosMessage, builded_msg, DACITE_CONFIG)
+
+    def sendMessageLegacy(
+        self, sender_id: str, recipiend_id: str, msg: str
+    ) -> None:
+        return self._request(
+            'post',
+            f'/users/{recipiend_id}/messages',
+            json=dataclasses.asdict(
+                self.buildMessage(sender_id, recipiend_id, msg),
+                dict_factory=nested_asdict_factory,
+            )
+        )

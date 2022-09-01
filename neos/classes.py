@@ -297,9 +297,29 @@ class NeosFriend:
     profile: Optional[ProfileData]
     latestMessageTime: datetime
 
+class NeosMessageType(Enum):
+    TEXT = "Text"
+    OBJECT = "Object"
+    SOUND = "Sound"
+    SESSIONINVITE = "SessionInvite"
+    CREDITTRANSFER = "CreditTransfer"
+    SUGARCUBES = "SugarCubes"
+
+neosMessageTypeMapping = {
+    NeosMessageType.TEXT: "Text",
+    NeosMessageType.OBJECT: "Object",
+    NeosMessageType.SOUND: "Sound",
+    NeosMessageType.SESSIONINVITE: "SessionInvite",
+    NeosMessageType.CREDITTRANSFER: "CreditTransfer",
+    NeosMessageType.SUGARCUBES: "SugarCubes",
+}
 
 @dataclass
-class NeosCloudVariable:
-    path: str
+class NeosMessage:
+    id: str
+    senderId: str
     ownerId: str
-    subpath: str
+    sendTime: str
+    recipientId: str
+    messageType: NeosMessageType
+    content: str
