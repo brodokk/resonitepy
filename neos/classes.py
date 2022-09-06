@@ -178,7 +178,7 @@ class SessionUser:
 class Session:
     activeSessions: Optional[str]
     activeUsers: int
-    compatibilityHash: str
+    compatibilityHash: Optional[str]
     correspondingWorldId: Optional[WorldId]
     description: Optional[str]
     hasEnded: bool
