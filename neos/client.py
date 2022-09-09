@@ -249,11 +249,28 @@ class Client:
     def sendMessageLegacy(
         self, sender_id: str, recipiend_id: str, msg: str
     ) -> None:
-        return self._request(
+        self._request(
             'post',
             f'/users/{recipiend_id}/messages',
             json=dataclasses.asdict(
                 self.buildMessage(sender_id, recipiend_id, msg),
                 dict_factory=nested_asdict_factory,
             )
+        )
+
+    def getMessageLegacy(
+        self, fromTime: str = None, maxItems: int = 100,
+        user: str = None, unreadOnly: bool = False
+    ) -> None:
+        params = {}
+        if fromTime:
+            raise ValueError{'fromTime is not yet implemented'}
+        params['maxItems'] = maxItems
+        params['unreadOnly'] = unreadOnly
+        if user:
+            params['user'] = user
+        return self._request(
+            'get',
+            f'/users/{self.userId}/messages',
+            params=params
         )
