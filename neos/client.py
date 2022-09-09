@@ -264,7 +264,7 @@ class Client:
     ) -> None:
         params = {}
         if fromTime:
-            raise ValueError{'fromTime is not yet implemented'}
+            raise ValueError('fromTime is not yet implemented')
         params['maxItems'] = maxItems
         params['unreadOnly'] = unreadOnly
         if user:
