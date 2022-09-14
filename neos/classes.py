@@ -323,3 +323,13 @@ class NeosMessage:
     recipientId: str
     messageType: NeosMessageType
     content: str
+
+@dataclass
+class NeosCloudVar:
+    ownerId: str
+    path: str
+    value: str
+    partitionKey: str
+    rowKey: str
+    timestamp: str
+    eTag: str

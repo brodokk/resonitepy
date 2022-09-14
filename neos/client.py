@@ -23,6 +23,7 @@ from .classes import (
     NeosMessage,
     NeosMessageType,
     neosMessageTypeMapping,
+    NeosCloudVar,
     RecordType,
     recordTypeMapping,
     OnlineStatus,
@@ -66,7 +67,7 @@ class Client:
     def headers(self) -> dict:
         default = {"User-Agent": "neos.py/{__version__}"}
         if not self.userId or not self.token:
-            print("WARNING: headers sections not set. this might throw an error soon...")
+            logging.warning("WARNING: headers sections not set. this might throw an error soon...")
             return default
         default["Authorization"] = f"neos {self.userId}:{self.token}"
         return default
@@ -109,12 +110,12 @@ class Client:
                 elif req.status_code == 403:
                     raise neos_exceptions.InvalidToken(req.headers)
                 else:
-                    raise neos_exceptions.NeosAPIException(req.status_code, req.text)
+                    raise neos_exceptions.NeosAPIException(req)
             if req.status_code == 200:
                 try:
                     responce = req.json()
                     if "message" in responce:
-                        raise neos_exceptions.NeosAPIException(responce["message"])
+                        raise neos_exceptions.NeosAPIException(req, message=response["message"])
                     return responce
                 except requests_exceptions.JSONDecodeError:
                     return req.text
@@ -273,4 +274,21 @@ class Client:
             'get',
             f'/users/{self.userId}/messages',
             params=params
+        )
+
+    def getCloudVar(self, ownerId: str, path: str) -> NeosCloudVar:
+        return self._request(
+            'get',
+            f'/users/{ownerId}/vars/{path}'
+        )
+
+    def setCloudVar(self, ownerId: str, path: str, value: bool) -> None:
+        return self._request(
+            'put',
+            f'/users/{ownerId}/vars/{path}',
+            json = {
+                "ownerId": ownerId,
+                "path": path,
+                "value": str(value).lower(),
+            }
         )
