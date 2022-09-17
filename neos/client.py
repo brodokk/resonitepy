@@ -292,3 +292,15 @@ class Client:
                 "value": str(value).lower(),
             }
         )
+
+    def searchUser(self, username: str) -> dict:
+        """ 
+        return a list of user based on username.
+
+        This is not the U- NeosVR user id, the API will search over usernames not ids.
+        """
+        return self._request(
+            'get',
+            '/users',
+            params = {'name': username}
+        )
