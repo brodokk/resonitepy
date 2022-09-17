@@ -1,10 +1,20 @@
 name: Build and Deploy doc
 on: [push]
+
 permissions:
   contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
 jobs:
   build-and-deploy:
-    concurrency: ci-${{ github.ref }}
+    environment:
+      name: test_ci
+      url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -12,13 +22,24 @@ jobs:
 
       - name: Install Poetry
         uses: snok/install-poetry@v1
+        with:
+          virtualenvs-in-project: true
 
       - name: Install and Build
         run: |
           poetry install
-          pdoc --html neos
+          source /home/runner/work/neos.py/neos.py/.venv/bin/activate
+          pdoc3 --html neos
 
-      - name: Deploy
-        uses: JamesIves/github-pages-deploy-action@v4
+      - name: Setup Pages
+        uses: actions/configure-pages@v2
+
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v1
         with:
-          folder: html
+          path: 'html/neos/'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v1
