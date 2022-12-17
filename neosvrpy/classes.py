@@ -271,6 +271,18 @@ class UserStatusData:
     OutputDevice: Optional[str]
     publicRSAKey: Optional[PublicRSAKey]
 
+@dataclass
+class NeosUserStatus:
+    onlineStatus: OnlineStatus
+    lastStatusChange: datetime
+    currentSessionAccessLevel: int
+    currentSessionHidden: bool
+    currentHosting: bool
+    compatibilityHash: Optional[str]
+    neosVersion: Optional[str]
+    publicRSAKey: Optional[PublicRSAKey]
+    OutputDevice: Optional[str]
+    isMobile: bool
 
 class FriendStatus(Enum):
     ACCEPTED = "Accepted"

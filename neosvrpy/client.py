@@ -20,6 +20,7 @@ from .classes import (
     NeosLink,
     NeosRecord,
     NeosUser,
+    NeosUserStatus,
     NeosMessage,
     NeosMessageType,
     neosMessageTypeMapping,
@@ -189,6 +190,12 @@ class Client:
             user = self.userId
         responce = self._request('get', "/users/" + user)
         return dacite.from_dict(NeosUser, responce, DACITE_CONFIG)
+
+    def getUserStatus(self, user: str = None) -> NeosUser:
+        if user is None:
+            user = self.userId
+        responce = self._request('get', '/users/' + user + '/status/')
+        return dacite.from_dict(NeosUserStatus, responce, DACITE_CONFIG)
 
     def getFriends(self):
         """
