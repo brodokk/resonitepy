@@ -13,7 +13,7 @@ concurrency:
 jobs:
   build-and-deploy:
     environment:
-      name: test_ci
+      name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
