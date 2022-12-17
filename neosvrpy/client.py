@@ -33,7 +33,7 @@ from .classes import (
 from .utils import nested_asdict_factory
 
 from .endpoints import CLOUDX_NEOS_API
-from neos import exceptions as neos_exceptions
+from neosvrpy import exceptions as neos_exceptions
 
 DACITE_CONFIG = dacite.Config(
     cast=[
@@ -65,7 +65,7 @@ class Client:
 
     @property
     def headers(self) -> dict:
-        default = {"User-Agent": "neos.py/{__version__}"}
+        default = {"User-Agent": "neosvrpy/{__version__}"}
         if not self.userId or not self.token:
             logging.warning("WARNING: headers sections not set. this might throw an error soon...")
             return default

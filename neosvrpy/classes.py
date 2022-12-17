@@ -4,8 +4,8 @@ from enum import Enum
 from pathlib import PureWindowsPath
 from typing import List, Optional
 
-from neos.secrets import generate
-from neos.exceptions import NeosException
+from neosvrpy.secrets import generate
+from neosvrpy.exceptions import NeosException
 
 from urllib.parse import ParseResult
 
