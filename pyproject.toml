@@ -1,12 +1,12 @@
 [tool.poetry]
-name = "neos.py"
+name = "neosvrpy"
 version = "0.1"
 description = "Unofficial NeosVR API python library."
 authors = ["brodokk <brodokk@brodokk.space>"]
 readme = "README.md"
 license = "GPL-3.0-only"
-homepage = "https://github.com/brodokk/neos.py"
-repository = "https://github.com/brodokk/neos.py"
+homepage = "https://github.com/brodokk/neosvrpy"
+repository = "https://github.com/brodokk/neosvrpy"
 include = [
     "LICENSE",
 ]
