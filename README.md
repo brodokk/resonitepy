@@ -25,5 +25,5 @@ client.login(
 
 friends = client.getFriends()
 for friend in friends:
-    print(friend.friendUsername
+    print(friend.friendUsername)
 ```
