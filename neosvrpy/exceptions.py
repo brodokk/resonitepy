@@ -1,3 +1,7 @@
+"""
+This module define the Exceptions classes use by this package.
+"""
+
 import requests
 import json
 

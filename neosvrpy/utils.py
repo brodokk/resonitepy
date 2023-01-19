@@ -1,3 +1,8 @@
+"""
+This module define some generic function use at multiple
+places in the package.
+"""
+
 from enum import Enum
 
 def nested_asdict_factory(data):

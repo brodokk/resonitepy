@@ -1,3 +1,8 @@
+"""
+This module define the client who will do the request to the
+NeosVR API.
+"""
+
 import dataclasses
 import json
 import logging
@@ -55,6 +60,7 @@ AUTHFILE_NAME = "auth.token"
 
 @dataclasses.dataclass
 class Client:
+    """Representation of a neosvrpy NeosVR client."""
     userId: str = None
     token: str = None
     expire: datetime = None  # This don't seems to be use by the API.
