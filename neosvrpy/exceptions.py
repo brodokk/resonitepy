@@ -1,4 +1,5 @@
 import requests
+import json
 
 class NeosException(Exception):
     pass
@@ -14,8 +15,7 @@ class NeosAPIException(NeosException):
         self.status_code = req.status_code
         try:
             self.json = req.json()
-        except requests.exceptions.JSONDecodeError:
-            print('ee')
+        except json.decoder.JSONDecodeError:
             self.json = {}
 
 class InvalidCredentials(NeosException):
