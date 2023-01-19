@@ -66,7 +66,7 @@ class Client:
 
     @property
     def headers(self) -> dict:
-        default = {"User-Agent": "neosvrpy/{__version__}"}
+        default = {"User-Agent": f"neosvrpy/{__version__}"}
         if not self.userId or not self.token:
             logging.warning("WARNING: headers sections not set. this might throw an error soon...")
             return default
