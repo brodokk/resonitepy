@@ -4,6 +4,7 @@ places in the package.
 """
 
 from enum import Enum
+from .classes import OwnerType
 
 def nested_asdict_factory(data):
     """Factory for convert dataclasses as dict.
@@ -25,3 +26,13 @@ def nested_asdict_factory(data):
         return obj
 
     return dict((k, convert_value(v)) for k, v in data)
+
+def getOwnerType(ownerId: str) -> str:
+    if ownerId.startswith('U-'):
+        return OwnerType.USER
+    elif ownerId.startswith('G-'):
+        return OwnerType.GROUP
+    elif ownerId.startswith('M-'):
+        return OwnerType.MACHINE
+    else:
+        return OwnerType.INVALID

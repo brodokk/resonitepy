@@ -35,8 +35,12 @@ from .classes import (
     OnlineStatus,
     CurrentSessionAccessLevel,
     FriendStatus,
+    OwnerType,
 )
-from .utils import nested_asdict_factory
+from .utils import (
+    nested_asdict_factory,
+    getOwnerType,
+)
 
 from .endpoints import CLOUDX_NEOS_API
 from neosvrpy import exceptions as neos_exceptions
@@ -289,22 +293,31 @@ class Client:
             params=params
         )
 
+    def getOwnerPath(self, ownerId: str):
+        ownerType = getOwnerType(ownerId)
+        if ownerType == OwnerType.USER:
+            return "users"
+        elif ownerType == OwnerType.GROUP:
+            return "groups"
+        else:
+            raise ValueError(f"invalid ownerType for {ownerId}")
+
     def listCloudVar(self, ownerId: str) -> List[NeosCloudVar]:
         return self._request(
             'get',
-            f'/users/{ownerId}/vars'
+            f'/{self.getOwnerPath(ownerId)}/{ownerId}/vars'
         )
 
     def getCloudVar(self, ownerId: str, path: str) -> NeosCloudVar:
         return self._request(
             'get',
-            f'/users/{ownerId}/vars/{path}'
+            f'/{self.getOwnerPath(ownerId)}/{ownerId}/vars/{path}'
         )
 
     def setCloudVar(self, ownerId: str, path: str, value: bool) -> None:
         return self._request(
             'put',
-            f'/users/{ownerId}/vars/{path}',
+            f'/{self.getOwnerPath(ownerId)}/{ownerId}/vars/{path}',
             json = {
                 "ownerId": ownerId,
                 "path": path,

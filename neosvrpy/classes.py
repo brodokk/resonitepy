@@ -377,3 +377,10 @@ class NeosCloudVar:
     rowKey: str
     timestamp: str
     eTag: str
+
+
+class OwnerType(Enum):
+    MACHING = "Machine"
+    USER = "User"
+    GROUP = "Group"
+    INVALID = "Invalid"
