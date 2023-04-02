@@ -125,22 +125,22 @@ class Client:
                     raise neos_exceptions.NeosAPIException(req)
             if req.status_code == 200:
                 try:
-                    responce = req.json()
-                    if "message" in responce:
+                    response = req.json()
+                    if "message" in response:
                         raise neos_exceptions.NeosAPIException(req, message=response["message"])
-                    return responce
+                    return response
                 except requests_exceptions.JSONDecodeError:
                     return req.text
-            # In case of a 204 responce
+            # In case of a 204 response
             return
 
     def login(self, data: LoginDetails) -> None:
-        responce = self._request('post', "/userSessions",
+        response = self._request('post', "/userSessions",
             json=dataclasses.asdict(data))
-        self.userId = responce["userId"]
-        self.token = responce["token"]
-        self.secretMachineId = responce["secretMachineId"]
-        self.expire = isoparse(responce["expire"])
+        self.userId = response["userId"]
+        self.token = response["token"]
+        self.secretMachineId = response["secretMachineId"]
+        self.expire = isoparse(response["expire"])
         self.lastUpdate = datetime.now()
         self.session.headers.update(self.headers)
 
@@ -199,14 +199,14 @@ class Client:
     def getUserData(self, user: str = None) -> NeosUser:
         if user is None:
             user = self.userId
-        responce = self._request('get', "/users/" + user)
-        return dacite.from_dict(NeosUser, responce, DACITE_CONFIG)
+        response = self._request('get', "/users/" + user)
+        return dacite.from_dict(NeosUser, response, DACITE_CONFIG)
 
     def getUserStatus(self, user: str = None) -> NeosUser:
         if user is None:
             user = self.userId
-        responce = self._request('get', '/users/' + user + '/status/')
-        return dacite.from_dict(NeosUserStatus, responce, DACITE_CONFIG)
+        response = self._request('get', '/users/' + user + '/status/')
+        return dacite.from_dict(NeosUserStatus, response, DACITE_CONFIG)
 
     def getFriends(self):
         """
@@ -214,41 +214,41 @@ class Client:
 
         Note: does not create friends out of thin air. you need to do that yourself.
         """
-        responce = self._request('get', f"/users/{self.userId}/friends")
-        return [dacite.from_dict(NeosFriend, user, DACITE_CONFIG) for user in responce]
+        response = self._request('get', f"/users/{self.userId}/friends")
+        return [dacite.from_dict(NeosFriend, user, DACITE_CONFIG) for user in response]
 
     def getInventory(self) -> List[NeosRecord]:
         """
         The typical entrypoint to the inventory system.
         """
-        responce = self._request(
+        response = self._request(
             'get',
             f"/users/{self.userId}/records",
             params={"path": "Inventory"},
         )
-        return self.processRecordList(responce)
+        return self.processRecordList(response)
 
     def getDirectory(self, directory: NeosDirectory) -> List[NeosRecord]:
         """
         given a directory, return it's contents.
         """
-        responce = self._request(
+        response = self._request(
             'get',
             f"/users/{directory.ownerId}/records",
             params={"path": directory.content_path},
         )
-        return self.processRecordList(responce)
+        return self.processRecordList(response)
 
     def resolveLink(self, link: NeosLink) -> NeosDirectory:
         """
         given a link type record, will return it's directory. directoy can be passed to getDirectory
         """
         _, user, record = link.assetUri.path.split("/")  # TODO: better
-        responce = self._request(
+        response = self._request(
             'get',
             f"/users/{user}/records/{record}",
         )
-        return dacite.from_dict(NeosDirectory, responce, DACITE_CONFIG)
+        return dacite.from_dict(NeosDirectory, response, DACITE_CONFIG)
 
     def buildMessage(
         self, sender_id: str, recipiend_id: str, msg: str
@@ -294,7 +294,7 @@ class Client:
             params=params
         )
 
-    def getOwnerPath(self, ownerId: str):
+    def getOwnerPath(self, ownerId: str) -> str:
         ownerType = getOwnerType(ownerId)
         if ownerType == OwnerType.USER:
             return "users"
