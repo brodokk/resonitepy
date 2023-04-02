@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "neosvrpy"
-version = "0.2"
+version = "0.2.1"
 description = "Unofficial NeosVR API python library."
 authors = ["brodokk <brodokk@brodokk.space>"]
 readme = "README.md"
