@@ -324,14 +324,14 @@ class Client:
         )
         return dacite.from_dict(NeosCloudVarDefs, response, DACITE_CONFIG)
 
-    def setCloudVar(self, ownerId: str, path: str, value: bool) -> None:
+    def setCloudVar(self, ownerId: str, path: str, value: str) -> None:
         return self._request(
             'put',
             f'/{self.getOwnerPath(ownerId)}/{ownerId}/vars/{path}',
             json = {
                 "ownerId": ownerId,
                 "path": path,
-                "value": str(value).lower(),
+                "value": value,
             }
         )
 
