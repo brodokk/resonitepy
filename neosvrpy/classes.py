@@ -384,3 +384,14 @@ class OwnerType(Enum):
     USER = "User"
     GROUP = "Group"
     INVALID = "Invalid"
+
+
+@dataclass
+class NeosCloudVarDefs:
+    DefinitionOwnerId: str
+    Subpath: str
+    VariableType: str
+    DefaultValue: str
+    ReadPermissions: List[str]
+    WritePermissions: List[str]
+    ListPermissions: List[str]

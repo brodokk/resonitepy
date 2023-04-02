@@ -36,6 +36,7 @@ from .classes import (
     CurrentSessionAccessLevel,
     FriendStatus,
     OwnerType,
+    NeosCloudVarDefs,
 )
 from .utils import (
     nested_asdict_factory,
@@ -312,6 +313,12 @@ class Client:
         return self._request(
             'get',
             f'/{self.getOwnerPath(ownerId)}/{ownerId}/vars/{path}'
+        )
+
+    def getCloudVarDefs(self, ownerId: str, path: str) -> NeosCloudVarDefs:
+        return self._request(
+            'get',
+            f'/{self.getOwnerPath(ownerId)}/{ownerId}/vardefs/{path}'
         )
 
     def setCloudVar(self, ownerId: str, path: str, value: bool) -> None:
