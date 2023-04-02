@@ -376,7 +376,7 @@ class NeosCloudVar:
     partitionKey: str
     rowKey: str
     timestamp: str
-    eTag: str
+    eTag: Optional[str]
 
 
 class OwnerType(Enum):
