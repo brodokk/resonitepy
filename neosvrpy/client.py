@@ -289,6 +289,12 @@ class Client:
             params=params
         )
 
+    def listCloudVar(self, ownerId: str) -> List[NeosCloudVar]:
+        return self._request(
+            'get',
+            f'/users/{ownerId}/vars'
+        )
+
     def getCloudVar(self, ownerId: str, path: str) -> NeosCloudVar:
         return self._request(
             'get',
