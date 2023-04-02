@@ -304,22 +304,25 @@ class Client:
             raise ValueError(f"invalid ownerType for {ownerId}")
 
     def listCloudVar(self, ownerId: str) -> List[NeosCloudVar]:
-        return self._request(
+        response = self._request(
             'get',
             f'/{self.getOwnerPath(ownerId)}/{ownerId}/vars'
         )
+        return [dacite.from_dict(NeosCloudVar, cloud_var, DACITE_CONFIG) for cloud_var in response]
 
     def getCloudVar(self, ownerId: str, path: str) -> NeosCloudVar:
-        return self._request(
+        response = self._request(
             'get',
             f'/{self.getOwnerPath(ownerId)}/{ownerId}/vars/{path}'
         )
+        return dacite.from_dict(NeosCloudVar, response, DACITE_CONFIG)
 
     def getCloudVarDefs(self, ownerId: str, path: str) -> NeosCloudVarDefs:
-        return self._request(
+        response = self._request(
             'get',
             f'/{self.getOwnerPath(ownerId)}/{ownerId}/vardefs/{path}'
         )
+        return dacite.from_dict(NeosCloudVarDefs, response, DACITE_CONFIG)
 
     def setCloudVar(self, ownerId: str, path: str, value: bool) -> None:
         return self._request(

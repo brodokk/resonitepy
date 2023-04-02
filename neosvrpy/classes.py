@@ -388,10 +388,15 @@ class OwnerType(Enum):
 
 @dataclass
 class NeosCloudVarDefs:
-    DefinitionOwnerId: str
-    Subpath: str
-    VariableType: str
-    DefaultValue: str
-    ReadPermissions: List[str]
-    WritePermissions: List[str]
-    ListPermissions: List[str]
+    definitionOwnerId: str
+    subpath: str
+    variableType: str
+    defaultValue: Optional[str]
+    deleteScheduled: bool
+    readPermissions: List[str]
+    writePermissions: List[str]
+    listPermissions: List[str]
+    partitionKey: str
+    rowKey: str
+    timestamp: str
+    eTag: str
