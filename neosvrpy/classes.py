@@ -204,7 +204,7 @@ class Session:
     hasEnded: bool
     headlessHost: bool
     hostMachineId: str
-    hostUserId: str
+    hostUserId: Optional[str]
     hostUsername: str
     isValid: bool
     joinedUsers: int

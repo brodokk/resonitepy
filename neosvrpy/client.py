@@ -37,6 +37,7 @@ from .classes import (
     FriendStatus,
     OwnerType,
     NeosCloudVarDefs,
+    Session as NeosSession,
 )
 from .utils import (
     nested_asdict_factory,
@@ -201,6 +202,12 @@ class Client:
             user = self.userId
         response = self._request('get', "/users/" + user)
         return dacite.from_dict(NeosUser, response, DACITE_CONFIG)
+
+    def getSession(self, session_id: str) -> NeosSession:
+        """ Return session information.
+        """
+        response = self._request('get', f'/sessions/{session_id}')
+        return dacite.from_dict(NeosSession, response, DACITE_CONFIG)
 
     def getUserStatus(self, user: str = None) -> NeosUser:
         if user is None:
