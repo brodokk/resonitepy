@@ -101,14 +101,14 @@ class Client:
         if self.lastUpdate and not ignoreUpdate:
             lastUpdate = self.lastUpdate
             # From PolyLogix/CloudX.js, the token seems to expire after 3600000 seconds
-            if (datetime.now() - lastUpdate).total_seconds() >= 3600000:
+            if (datetime.now() - lastUpdate).total_seconds() <= 3600000:
                 self._request('patch', '/userSessions', ignoreUpdate=True)
             # While the API dont seems to implement more security, official client behavior must be respected.
             # Only disconnect after 1 day of inactivity for now.
             # TODO: Implement disconnection after 1 week of inactivity when implementing the rememberMe feature.
-            if 64800 >= (datetime.now() - lastUpdate).total_seconds() >= 85536:
-                self._request('patch', '/userSessions', ignoreUpdate=True)
-            elif (datetime.now() - lastUpdate).total_seconds() >= 86400:
+            #if 64800 >= (datetime.now() - lastUpdate).total_seconds() >= 85536:
+            #    self._request('patch', '/userSessions', ignoreUpdate=True)
+            else:
                 raise neos_exceptions.InvalidToken("Token expired")
         args = {'url': CLOUDX_NEOS_API + path}
         if data: args['data'] = data
