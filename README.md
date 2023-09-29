@@ -1,5 +1,8 @@
 # neosvrpy
 
+> [!WARNING]  
+> Depreciation notice for NeosVR, this project will be forked and modified to support only Resonite.
+
 Unofficial NeosVR API python library.
 
 Based on a work by [mralext20](https://github.com/mralext20/neos.py). The main
