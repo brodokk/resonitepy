@@ -5,10 +5,10 @@ This module define the Exceptions classes use by this package.
 import requests
 import json
 
-class NeosException(Exception):
+class ResoniteException(Exception):
     pass
 
-class NeosAPIException(NeosException):
+class ResoniteAPIException(ResoniteException):
 
     def __init__(self, req, message = None):
         if not message:
@@ -22,17 +22,17 @@ class NeosAPIException(NeosException):
         except json.decoder.JSONDecodeError:
             self.json = {}
 
-class InvalidCredentials(NeosException):
+class InvalidCredentials(ResoniteException):
     pass
 
 
-class NoTokenError(NeosException):
+class NoTokenError(ResoniteException):
     pass
 
 
-class FolderNotFound(NeosException):
+class FolderNotFound(ResoniteException):
     pass
 
 
-class InvalidToken(NeosException):
+class InvalidToken(ResoniteException):
     pass

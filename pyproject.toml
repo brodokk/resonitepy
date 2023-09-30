@@ -1,12 +1,12 @@
 [tool.poetry]
-name = "neosvrpy"
-version = "0.2.1"
-description = "Unofficial NeosVR API python library."
+name = "resonitepy"
+version = "0.1.0"
+description = "Unofficial Resonite API python library."
 authors = ["brodokk <brodokk@brodokk.space>"]
 readme = "README.md"
 license = "MIT"
-homepage = "https://github.com/brodokk/neosvrpy"
-repository = "https://github.com/brodokk/neosvrpy"
+homepage = "https://github.com/brodokk/resonitepy"
+repository = "https://github.com/brodokk/resonitepy"
 include = [
     "LICENSE",
 ]

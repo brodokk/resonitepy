@@ -4,7 +4,7 @@ import string
 
 def generate() -> str:
     """
-    direct reimpl of secretID.js from account.neosvr.com
+    direct reimpl of secretID.js from account.resonite.com
     """
     length = 12
     valid_chars = string.ascii_letters + string.digits

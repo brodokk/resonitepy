@@ -28,8 +28,8 @@ jobs:
       - name: Install and Build
         run: |
           poetry install
-          source /home/runner/work/neosvrpy/neosvrpy/.venv/bin/activate
-          pdoc3 --html neosvrpy
+          source /home/runner/work/resonitepy/resonitepy/.venv/bin/activate
+          pdoc3 --html resonitepy
 
       - name: Setup Pages
         uses: actions/configure-pages@v2
@@ -38,7 +38,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v1
         with:
-          path: 'html/neosvrpy/'
+          path: 'html/resonitepy/'
 
       - name: Deploy to GitHub Pages
         id: deployment

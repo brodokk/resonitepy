@@ -1,6 +1,6 @@
 """
 This module define the client who will do the request to the
-NeosVR API.
+Resonite API.
 """
 
 import dataclasses
@@ -20,40 +20,44 @@ from dateutil.parser import isoparse
 from . import __version__
 from .classes import (
     LoginDetails,
-    NeosDirectory,
-    NeosFriend,
-    NeosLink,
-    NeosRecord,
-    NeosUser,
-    NeosUserStatus,
-    NeosMessage,
-    NeosMessageType,
-    neosMessageTypeMapping,
-    NeosCloudVar,
+    ResoniteDirectory,
+    ResoniteContact,
+    ResoniteLink,
+    ResoniteRecord,
+    ResoniteUser,
+    ResoniteUserEntitlementShoutOut,
+    ResoniteUserEntitlementCredits,
+    ResoniteMessage,
+    ResoniteMessageType,
+    ResoniteMessageContentSessionInvite,
+    ResoniteMessageContentObject,
+    ResoniteMessageContentSound,
+    ResoniteMessageContentText,
+    ResoniteCloudVar,
     RecordType,
     recordTypeMapping,
     OnlineStatus,
-    CurrentSessionAccessLevel,
-    FriendStatus,
+    ResoniteSession,
+    CurrentResoniteSessionAccessLevel,
+    ContactStatus,
     OwnerType,
-    NeosCloudVarDefs,
-    Session as NeosSession,
+    ResoniteCloudVarDefs,
 )
 from .utils import (
     nested_asdict_factory,
     getOwnerType,
 )
 
-from .endpoints import CLOUDX_NEOS_API
-from neosvrpy import exceptions as neos_exceptions
+from .endpoints import API_URL, ASSETS_URL
+from resonitepy import exceptions as resonite_exceptions
 
 DACITE_CONFIG = dacite.Config(
     cast=[
-        NeosMessageType,
+        ResoniteMessageType,
         RecordType,
         OnlineStatus,
-        CurrentSessionAccessLevel,
-        FriendStatus
+        CurrentResoniteSessionAccessLevel,
+        ContactStatus,
     ],
     type_hooks={
         datetime: isoparse,
@@ -66,30 +70,31 @@ AUTHFILE_NAME = "auth.token"
 
 @dataclasses.dataclass
 class Client:
-    """Representation of a neosvrpy NeosVR client."""
+    """Representation of a resonitepy Resonite client."""
     userId: str = None
     token: str = None
     expire: datetime = None  # This don't seems to be use by the API.
     rememberMe: bool = False
     lastUpdate: datetime = None
-    secretMachineId: str = None
+    secretMachineIdHash: str = None
+    secretMachineIdSalt: str = None
     session: Session = Session()
-
+    session.headers['UID'] = "91F152383B7698EB38E9133B318FB97C849470053D0032FB659B0483189CB71A"
 
     @property
     def headers(self) -> dict:
-        default = {"User-Agent": f"neosvrpy/{__version__}"}
+        default = {"User-Agent": f"resonitepy/{__version__}"}
         if not self.userId or not self.token:
             logging.warning("WARNING: headers sections not set. this might throw an error soon...")
             return default
-        default["Authorization"] = f"neos {self.userId}:{self.token}"
+        default["Authorization"] = f"res {self.userId}:{self.token}"
         return default
 
     @staticmethod
     def processRecordList(data: List[dict]):
         ret = []
         for raw_item in data:
-            item = dacite.from_dict(NeosRecord, raw_item, DACITE_CONFIG)
+            item = dacite.from_dict(ResoniteRecord, raw_item, DACITE_CONFIG)
             x = dacite.from_dict(recordTypeMapping[item.recordType], raw_item, DACITE_CONFIG)
             ret.append(x)
         return ret
@@ -110,26 +115,26 @@ class Client:
             #if 64800 >= (datetime.now() - lastUpdate).total_seconds() >= 85536:
             #    self._request('patch', '/userSessions', ignoreUpdate=True)
             else:
-                raise neos_exceptions.InvalidToken("Token expired")
-        args = {'url': CLOUDX_NEOS_API + path}
+                raise resonite_exceptions.InvalidToken("Token expired")
+        args = {'url': API_URL + path}
         if data: args['data'] = data
         if json: args['json'] = json
         if params: args['params'] = params
         func = getattr(self.session, verb, None)
         with func(**args) as req:
-            logging.debug("NeosAPI: [{}] {}".format(req.status_code, args))
+            logging.debug("ResoniteAPI: [{}] {}".format(req.status_code, args))
             if req.status_code not in [200, 204]:
                 if "Invalid credentials" in req.text:
-                    raise neos_exceptions.InvalidCredentials(req.text)
+                    raise resonite_exceptions.InvalidCredentials(req.text)
                 elif req.status_code == 403:
-                    raise neos_exceptions.InvalidToken(req.headers)
+                    raise resonite_exceptions.InvalidToken(req.headers)
                 else:
-                    raise neos_exceptions.NeosAPIException(req)
+                    raise resonite_exceptions.ResoniteAPIException(req)
             if req.status_code == 200:
                 try:
                     response = req.json()
                     if "message" in response:
-                        raise neos_exceptions.NeosAPIException(req, message=response["message"])
+                        raise resonite_exceptions.ResoniteAPIException(req, message=response["message"])
                     return response
                 except requests_exceptions.JSONDecodeError:
                     return req.text
@@ -137,12 +142,14 @@ class Client:
             return
 
     def login(self, data: LoginDetails) -> None:
-        response = self._request('post', "/userSessions",
-            json=dataclasses.asdict(data))
-        self.userId = response["userId"]
-        self.token = response["token"]
-        self.secretMachineId = response["secretMachineId"]
-        self.expire = isoparse(response["expire"])
+        json=dataclasses.asdict(data)
+        json['authentication'] = data.authentication.build_dict()
+        response = self._request('post', "/userSessions", json=json)
+        self.userId = response["entity"]["userId"]
+        self.token = response["entity"]["token"]
+        self.secretMachineIdHash = response["entity"]["secretMachineIdHash"]
+        self.secretMachineIdSalt = response["entity"]["secretMachineIdSalt"]
+        self.expire = isoparse(response["entity"]["expire"])
         self.lastUpdate = datetime.now()
         self.session.headers.update(self.headers)
 
@@ -157,12 +164,13 @@ class Client:
         self.userId = None
         self.token = None
         self.expire = None
-        self.secretMachineId = None
+        self.secretMachineIdHash = None
+        self.secretMachineIdSalt = None
         self.lastUpdate = None
         del self.session.headers["Authorization"]
         self.session.headers.update(self.headers)
 
-    def loadToken(self):
+    def load_token(self):
         if OSpath.exists(AUTHFILE_NAME):
             with open(AUTHFILE_NAME, "r") as f:
                 session = json.load(f)
@@ -171,61 +179,56 @@ class Client:
                     self.token = session["token"]
                     self.userId = session["userId"]
                     self.expire = expire
-                    self.secretMachineId = session["secretMachineId"]
+                    self.secretMachineIdHash = session["secretMachineIdHash"]
+                    self.secretMachineIdSalt = session["secretMachineIdSalt"]
                     self.session.headers.update(self.headers)
                 else:
-                    raise neos_exceptions.NoTokenError
+                    raise resonite_exceptions.NoTokenError
         else:
-            raise neos_exceptions.NoTokenError
+            raise resonite_exceptions.NoTokenError
 
-    def saveToken(self):
+    def save_token(self):
         with open(AUTHFILE_NAME, "w+") as f:
             json.dump(
                 {
                     "userId": self.userId,
                     "expire": self.expire.isoformat(),
                     "token": self.token,
-                    "secretMachineId": self.secretMachineId,
+                    "secretMachineIdHash": self.secretMachineIdHash,
+                    "secretMachineIdSalt": self.secretMachineIdSalt,
                 },
                 f,
             )
 
-    def neosDBSignature(self, url: str) -> str:
-        return url.split("//")[1].split(".")[0]
+    def resDBSignature(self, resUrl: str) -> str:
+        return resUrl.split("//")[1].split(".")[0]
 
-    def neosDbToHttp(self, iconUrl: str) -> str:
-        url = "https://assets.neos.com/assets"
-        url = url + self.neosDBSignature(iconUrl)
+    def resDbToHttp(self, resUrl: str) -> str:
+        url = ASSETS_URL + self.resDBSignature(resUrl)
         return url
 
-    def getUserData(self, user: str = None) -> NeosUser:
+    def getUserData(self, user: str = None) -> ResoniteUser:
         if user is None:
             user = self.userId
         response = self._request('get', "/users/" + user)
-        return dacite.from_dict(NeosUser, response, DACITE_CONFIG)
+        return dacite.from_dict(ResoniteUser, response, DACITE_CONFIG)
 
-    def getSession(self, session_id: str) -> NeosSession:
+    def getSession(self, session_id: str) -> ResoniteSession:
         """ Return session information.
         """
         response = self._request('get', f'/sessions/{session_id}')
-        return dacite.from_dict(NeosSession, response, DACITE_CONFIG)
+        return dacite.from_dict(ResoniteSession, response, DACITE_CONFIG)
 
-    def getUserStatus(self, user: str = None) -> NeosUser:
-        if user is None:
-            user = self.userId
-        response = self._request('get', '/users/' + user + '/status/')
-        return dacite.from_dict(NeosUserStatus, response, DACITE_CONFIG)
-
-    def getFriends(self):
+    def getContacts(self):
         """
-        returns the friends you have.
+        returns the contacts you have.
 
-        Note: does not create friends out of thin air. you need to do that yourself.
+        Note: does not create contact out of thin air. you need to do that yourself.
         """
-        response = self._request('get', f"/users/{self.userId}/friends")
-        return [dacite.from_dict(NeosFriend, user, DACITE_CONFIG) for user in response]
+        response = self._request('get', f"/users/{self.userId}/contacts")
+        return [dacite.from_dict(ResoniteContact, user, DACITE_CONFIG) for user in response]
 
-    def getInventory(self) -> List[NeosRecord]:
+    def getInventory(self) -> List[ResoniteRecord]:
         """
         The typical entrypoint to the inventory system.
         """
@@ -236,7 +239,7 @@ class Client:
         )
         return self.processRecordList(response)
 
-    def getDirectory(self, directory: NeosDirectory) -> List[NeosRecord]:
+    def getDirectory(self, directory: ResoniteDirectory) -> List[ResoniteRecord]:
         """
         given a directory, return it's contents.
         """
@@ -247,48 +250,29 @@ class Client:
         )
         return self.processRecordList(response)
 
-    def resolveLink(self, link: NeosLink) -> NeosDirectory:
+    def resolveLink(self, link: ResoniteLink) -> ResoniteDirectory:
         """
         given a link type record, will return it's directory. directoy can be passed to getDirectory
         """
-        _, user, record = link.assetUri.path.split("/")  # TODO: better
+        if link.assetUri.scheme != 'resrec':
+            raise resonite_exceptions.ResoniteException(f'Not supported link type {link}')
+        import re
+        m = re.search('\/(U-.*)\/(R-.*)', link.assetUri.path)
+        if not m:
+            raise resonite_exceptions.ResoniteException(f'Not supported link type {link}')
+        user = m.group(1)
+        record = m.group(2)
         response = self._request(
             'get',
             f"/users/{user}/records/{record}",
         )
-        return dacite.from_dict(NeosDirectory, response, DACITE_CONFIG)
+        return dacite.from_dict(ResoniteDirectory, response, DACITE_CONFIG)
 
-    def buildMessage(
-        self, sender_id: str, recipiend_id: str, msg: str
-    ) -> NeosMessage:
-        message_type = NeosMessageType.TEXT
-        builded_msg = {
-            'id': f'MSG-{uuid4()}',
-            'senderId': sender_id,
-            'ownerId': sender_id,
-            'sendTime': datetime.now().isoformat(),
-            'recipientId': recipiend_id,
-            'messageType': message_type,
-            'content': msg,
-        }
-        return dacite.from_dict(NeosMessage, builded_msg, DACITE_CONFIG)
-
-    def sendMessageLegacy(
-        self, sender_id: str, recipiend_id: str, msg: str
-    ) -> None:
-        self._request(
-            'post',
-            f'/users/{recipiend_id}/messages',
-            json=dataclasses.asdict(
-                self.buildMessage(sender_id, recipiend_id, msg),
-                dict_factory=nested_asdict_factory,
-            )
-        )
 
     def getMessageLegacy(
         self, fromTime: str = None, maxItems: int = 100,
         user: str = None, unreadOnly: bool = False
-    ) -> None:
+    ) -> List[ResoniteMessage]:
         params = {}
         if fromTime:
             raise ValueError('fromTime is not yet implemented')
@@ -296,11 +280,33 @@ class Client:
         params['unreadOnly'] = unreadOnly
         if user:
             params['user'] = user
-        return self._request(
+        response = self._request(
             'get',
             f'/users/{self.userId}/messages',
             params=params
         )
+        messages = []
+        for message in response:
+            if message['messageType'] == 'SessionInvite':
+                message['content'] = json.loads(message['content'])
+                ResoniteMessageContentType = ResoniteMessageContentSessionInvite
+            elif message['messageType'] == 'Object':
+                message['content'] = json.loads(message['content'])
+                ResoniteMessageContentType = ResoniteMessageContentObject
+            elif message['messageType'] == 'Sound':
+                message['content'] = json.loads(message['content'])
+                ResoniteMessageContentType = ResoniteMessageContentSound
+            elif  message['messageType'] == 'Text':
+                ResoniteMessageContentType = ResoniteMessageContentText
+            else:
+                raise ValueError(f'Non supported type {message["messageType"]}')
+            message['content'] = dacite.from_dict(
+                ResoniteMessageContentType, message['content'], DACITE_CONFIG
+            )
+            messages.append(
+                dacite.from_dict(ResoniteMessage, message, DACITE_CONFIG)
+            )
+        return messages
 
     def getOwnerPath(self, ownerId: str) -> str:
         ownerType = getOwnerType(ownerId)
@@ -311,26 +317,33 @@ class Client:
         else:
             raise ValueError(f"invalid ownerType for {ownerId}")
 
-    def listCloudVar(self, ownerId: str) -> List[NeosCloudVar]:
+    def listCloudVar(self, ownerId: str) -> List[ResoniteCloudVar]:
         response = self._request(
             'get',
             f'/{self.getOwnerPath(ownerId)}/{ownerId}/vars'
         )
-        return [dacite.from_dict(NeosCloudVar, cloud_var, DACITE_CONFIG) for cloud_var in response]
+        return [dacite.from_dict(ResoniteCloudVar, cloud_var, DACITE_CONFIG) for cloud_var in response]
 
-    def getCloudVar(self, ownerId: str, path: str) -> NeosCloudVar:
+    def getCloudVar(self, ownerId: str, path: str) -> ResoniteCloudVar:
         response = self._request(
             'get',
             f'/{self.getOwnerPath(ownerId)}/{ownerId}/vars/{path}'
         )
-        return dacite.from_dict(NeosCloudVar, response, DACITE_CONFIG)
+        return dacite.from_dict(ResoniteCloudVar, response, DACITE_CONFIG)
 
-    def getCloudVarDefs(self, ownerId: str, path: str) -> NeosCloudVarDefs:
+    def getCloudVarDefs(self, ownerId: str, path: str) -> ResoniteCloudVarDefs:
+        json=[{
+            "ownerId": ownerId,
+            "path": path,
+        }]
         response = self._request(
-            'get',
-            f'/{self.getOwnerPath(ownerId)}/{ownerId}/vardefs/{path}'
+            'post',
+            f'/readvars',
+            json=json,
         )
-        return dacite.from_dict(NeosCloudVarDefs, response, DACITE_CONFIG)
+        if not response:
+            raise resonite_exceptions.ResoniteException(f"{ownerId} {path} doesn't exist")
+        return dacite.from_dict(ResoniteCloudVarDefs, response[0]['definition'], DACITE_CONFIG)
 
     def setCloudVar(self, ownerId: str, path: str, value: str) -> None:
         return self._request(
@@ -343,14 +356,34 @@ class Client:
             }
         )
 
-    def searchUser(self, username: str) -> dict:
-        """ 
+    def searchUser(self, username: str) -> List[ResoniteUser]:
+        """
         return a list of user based on username.
 
-        This is not the U- NeosVR user id, the API will search over usernames not ids.
+        This is not the U- Resonite user id, the API will search over usernames not ids.
         """
-        return self._request(
+        response = self._request(
             'get',
             '/users',
             params = {'name': username}
         )
+        users = []
+        for user in response:
+            if 'entitlements' in user:
+                entitlements = []
+                for entitlement in user['entitlements']:
+                    if entitlement['$type'] == 'shoutOut':
+                        del entitlement['$type']
+                        entitlements.append(
+                            ResoniteUserEntitlementShoutOut(**entitlement)
+                        )
+                    elif entitlement['$type'] == 'credits':
+                        del entitlement['$type']
+                        entitlements.append(
+                            ResoniteUserEntitlementCredits(**entitlement)
+                        )
+                    else:
+                        print('Warning: {entitlement["$type"]} unknown')
+                user['entitlements'] = entitlements
+            users.append(dacite.from_dict(ResoniteUser, user, DACITE_CONFIG))
+        return users
