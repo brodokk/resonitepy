@@ -13,15 +13,19 @@ Quick exemple of to use it
 
 ```
 from resonitepy.client import Client
-from resonitepy.classes import LoginDetails
+from resonitepy.classes import LoginDetails, LoginDetailsAuth
 
 client = Client()
 
 client.login(
-    LoginDetails(username="YOURUSERNAME", password="YOURPASSWORD")
+    LoginDetails(
+        username="YOURUSERNAME",
+        authentication=LoginDetailsAuth(password="YOURPASSWORD"),
+    )
 )
 
-friends = client.getFriends()
+
+friends = client.getContacts()
 for friend in friends:
-    print(friend.friendUsername)
+    print(friend.contactUsername)
 ```
