@@ -3,11 +3,12 @@ This module define the client who will do the request to the
 Resonite API.
 """
 
+import os
 import dataclasses
 import json
 import logging
 from datetime import datetime
-from uuid import uuid4
+from hashlib import sha256
 from os import path as OSpath
 from typing import Dict, List
 from urllib.parse import ParseResult, urlparse
@@ -79,7 +80,7 @@ class Client:
     secretMachineIdHash: str = None
     secretMachineIdSalt: str = None
     session: Session = Session()
-    session.headers['UID'] = "91F152383B7698EB38E9133B318FB97C849470053D0032FB659B0483189CB71A"
+    session.headers['UID'] = sha256(os.urandom(16)).hexdigest().upper()
 
     @property
     def headers(self) -> dict:
