@@ -179,10 +179,12 @@ class QuotaBytesSources:
     paid: int
     mmc21_honorary: int
 
+
 @dataclass
 class ResoniteUserQuotaBytesSources:
     base: int
     patreon: Optional[int]
+
 
 @dataclass
 class ResoniteUserMigrationData:
@@ -190,7 +192,7 @@ class ResoniteUserMigrationData:
     userId: str
     quotaBytes: int
     usedBytes: int
-    quotaBytesSources: ResoniteUserQuotaBytesSources
+    quotaBytesSources: Optional[ResoniteUserQuotaBytesSources]
     registrationDate: datetime
 
 
@@ -199,11 +201,62 @@ class ResoniteUserEntitlementShoutOut:
     shoutoutType: str
     friendlyDescription: str
 
+
 @dataclass
 class ResoniteUserEntitlementCredits:
     creditType: str
     friendlyDescription: str
 
+
+@dataclass
+class ResoniteUserEntitlementGroupCreation:
+    groupCount: int
+
+
+@dataclass
+class ResoniteEntitlementDeleteRecovery:
+    pass
+
+
+@dataclass
+class ResoniteUserEntitlementBadge:
+    badgeType: str
+    badgeCount: int
+
+
+@dataclass
+class ResoniteUserEntitlementHeadless:
+    friendlyDescription: str
+
+
+@dataclass
+class ResoniteUserEntitlementExitMessage:
+    isLifetime: bool
+    messageCount: int
+    friendlyDescription: str
+
+
+@dataclass
+class ResoniteUserEntitlementStorageSpace:
+    bytes: int
+    maximumShareLevel: int
+    storageId: str
+    group: str
+    startsOn: datetime
+    expiresOn: datetime
+    name: str
+    description: str
+
+resoniteUserEntitlementTypeMapping = {
+    'shoutOut': ResoniteUserEntitlementShoutOut,
+    'credits': ResoniteUserEntitlementCredits,
+    'groupCreation': ResoniteUserEntitlementGroupCreation,
+    'deleteRecovery': ResoniteEntitlementDeleteRecovery,
+    'badge': ResoniteUserEntitlementBadge,
+    'headless': ResoniteUserEntitlementHeadless,
+    'exitMessage': ResoniteUserEntitlementExitMessage,
+    'storageSpace': ResoniteUserEntitlementStorageSpace,
+}
 
 @dataclass
 class ResoniteUser:
@@ -218,7 +271,16 @@ class ResoniteUser:
     #2fa_login: bool # TODO
     profile: Optional[ProfileData]
     supporterMetadata: Optional[List[dict]]
-    entitlements: Optional[List[ResoniteUserEntitlementShoutOut | ResoniteUserEntitlementCredits]]
+    entitlements: Optional[List[
+        ResoniteUserEntitlementShoutOut |
+        ResoniteUserEntitlementCredits |
+        ResoniteUserEntitlementGroupCreation |
+        ResoniteEntitlementDeleteRecovery |
+        ResoniteUserEntitlementBadge |
+        ResoniteUserEntitlementHeadless |
+        ResoniteUserEntitlementExitMessage |
+        ResoniteUserEntitlementStorageSpace
+    ]]
     migratedData: Optional[ResoniteUserMigrationData]
     tags: Optional[List[str]] = field(default_factory=list)
 
@@ -513,7 +575,7 @@ class ResoniteCloudVar:
     value: Optional[str]
     partitionKey: str
     rowKey: str
-    timestamp: str
+    timestamp: Optional[str]
     eTag: Optional[str]
 
 
