@@ -12,11 +12,10 @@ include = [
 ]
 
 [tool.poetry.dependencies]
-python = ">=3.7"
-python-dateutil = "2.8.2"
-requests = "2.28.1"
-dacite = "1.6.0"
-importlib-metadata = {version = ">=1.7.0", python = "<3.8"}
+python = ">=3.10"
+python-dateutil = "^2.8.2"
+requests = "^2.28.1"
+dacite = "^1.6.0"
 
 [tool.poetry.dev-dependencies]
 pdoc3 = "^0.10.0"
