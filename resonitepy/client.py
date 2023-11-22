@@ -213,19 +213,20 @@ class Client:
         if user is None:
             user = self.userId
         response = self._request('get', "/users/" + user)
-        entitlements = []
-        for entitlement in response['entitlements']:
-            if '$type' in entitlement:
-                entitlement_type = entitlement['$type']
-                del entitlement['$type']
-                entitlements.append(
-                    dacite.from_dict(
-                        resoniteUserEntitlementTypeMapping[entitlement_type],
-                        entitlement,
-                        DACITE_CONFIG
+        if 'entitlements' in response:
+            entitlements = []
+            for entitlement in response['entitlements']:
+                if '$type' in entitlement:
+                    entitlement_type = entitlement['$type']
+                    del entitlement['$type']
+                    entitlements.append(
+                        dacite.from_dict(
+                            resoniteUserEntitlementTypeMapping[entitlement_type],
+                            entitlement,
+                            DACITE_CONFIG
+                        )
                     )
-                )
-        response['entitlements'] = entitlements
+            response['entitlements'] = entitlements
         return dacite.from_dict(ResoniteUser, response, DACITE_CONFIG)
 
     def getSession(self, session_id: str) -> ResoniteSession:
