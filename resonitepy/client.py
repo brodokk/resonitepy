@@ -53,6 +53,12 @@ from .utils import (
 from .endpoints import API_URL, ASSETS_URL
 from resonitepy import exceptions as resonite_exceptions
 
+try:
+    DEBUG = json.loads(os.environ.get('DEBUG', 'False').lower())
+except json.decoder.JSONDecodeError:
+    print("Debug must be True or False")
+    exit(1)
+
 DACITE_CONFIG = dacite.Config(
     cast=[
         ResoniteMessageType,
@@ -65,10 +71,30 @@ DACITE_CONFIG = dacite.Config(
         datetime: isoparse,
         ParseResult: urlparse,
     },
+    strict=DEBUG,
 )
 
 AUTHFILE_NAME = "auth.token"
 
+def to_class(data_class: type , data: dict, config: dacite.Config) -> object:
+    """ Convert dict object to ResonitePy Class.
+
+    Args:
+        data_class (type): A class that define the final class instance.
+        data (dict): The data to put in the instance of this class.
+        config (dacite.Config): The Dacite configuration to create this instance of class.
+
+    Returns:
+        object: The instance of the class with the wanted data.
+    """
+    try:
+        return dacite.from_dict(data_class, data, config)
+    except Exception as exc:
+        print(f'Error for class {data_class.__name__}')
+        if DEBUG:
+            print("With data:")
+            print(data)
+        print(exc)
 
 @dataclasses.dataclass
 class Client:
@@ -96,8 +122,8 @@ class Client:
     def processRecordList(data: List[dict]):
         ret = []
         for raw_item in data:
-            item = dacite.from_dict(ResoniteRecord, raw_item, DACITE_CONFIG)
-            x = dacite.from_dict(recordTypeMapping[item.recordType], raw_item, DACITE_CONFIG)
+            item = to_class(ResoniteRecord, raw_item, DACITE_CONFIG)
+            x = to_class(recordTypeMapping[item.recordType], raw_item, DACITE_CONFIG)
             ret.append(x)
         return ret
 
@@ -220,20 +246,20 @@ class Client:
                     entitlement_type = entitlement['$type']
                     del entitlement['$type']
                     entitlements.append(
-                        dacite.from_dict(
+                        to_class(
                             resoniteUserEntitlementTypeMapping[entitlement_type],
                             entitlement,
                             DACITE_CONFIG
                         )
                     )
             response['entitlements'] = entitlements
-        return dacite.from_dict(ResoniteUser, response, DACITE_CONFIG)
+        return to_class(ResoniteUser, response, DACITE_CONFIG)
 
     def getSession(self, session_id: str) -> ResoniteSession:
         """ Return session information.
         """
         response = self._request('get', f'/sessions/{session_id}')
-        return dacite.from_dict(ResoniteSession, response, DACITE_CONFIG)
+        return to_class(ResoniteSession, response, DACITE_CONFIG)
 
     def getContacts(self):
         """
@@ -242,7 +268,7 @@ class Client:
         Note: does not create contact out of thin air. you need to do that yourself.
         """
         response = self._request('get', f"/users/{self.userId}/contacts")
-        return [dacite.from_dict(ResoniteContact, user, DACITE_CONFIG) for user in response]
+        return [to_class(ResoniteContact, user, DACITE_CONFIG) for user in response]
 
     def getInventory(self) -> List[ResoniteRecord]:
         """
@@ -282,7 +308,7 @@ class Client:
             'get',
             f"/users/{user}/records/{record}",
         )
-        return dacite.from_dict(ResoniteDirectory, response, DACITE_CONFIG)
+        return to_class(ResoniteDirectory, response, DACITE_CONFIG)
 
 
     def getMessageLegacy(
@@ -316,11 +342,11 @@ class Client:
                 ResoniteMessageContentType = ResoniteMessageContentText
             else:
                 raise ValueError(f'Non supported type {message["messageType"]}')
-            message['content'] = dacite.from_dict(
+            message['content'] = to_class(
                 ResoniteMessageContentType, message['content'], DACITE_CONFIG
             )
             messages.append(
-                dacite.from_dict(ResoniteMessage, message, DACITE_CONFIG)
+                to_class(ResoniteMessage, message, DACITE_CONFIG)
             )
         return messages
 
@@ -338,14 +364,14 @@ class Client:
             'get',
             f'/{self.getOwnerPath(ownerId)}/{ownerId}/vars'
         )
-        return [dacite.from_dict(ResoniteCloudVar, cloud_var, DACITE_CONFIG) for cloud_var in response]
+        return [to_class(ResoniteCloudVar, cloud_var, DACITE_CONFIG) for cloud_var in response]
 
     def getCloudVar(self, ownerId: str, path: str) -> ResoniteCloudVar:
         response = self._request(
             'get',
             f'/{self.getOwnerPath(ownerId)}/{ownerId}/vars/{path}'
         )
-        return dacite.from_dict(ResoniteCloudVar, response, DACITE_CONFIG)
+        return to_class(ResoniteCloudVar, response, DACITE_CONFIG)
 
     def getCloudVarDefs(self, ownerId: str, path: str) -> ResoniteCloudVarDefs:
         json=[{
@@ -359,7 +385,7 @@ class Client:
         )
         if not response:
             raise resonite_exceptions.ResoniteException(f"{ownerId} {path} doesn't exist")
-        return dacite.from_dict(ResoniteCloudVarDefs, response[0]['definition'], DACITE_CONFIG)
+        return to_class(ResoniteCloudVarDefs, response[0]['definition'], DACITE_CONFIG)
 
     def setCloudVar(self, ownerId: str, path: str, value: str) -> None:
         return self._request(
@@ -401,5 +427,5 @@ class Client:
                     else:
                         print('Warning: {entitlement["$type"]} unknown')
                 user['entitlements'] = entitlements
-            users.append(dacite.from_dict(ResoniteUser, user, DACITE_CONFIG))
+            users.append(to_class(ResoniteUser, user, DACITE_CONFIG))
         return users
