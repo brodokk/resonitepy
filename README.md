@@ -5,7 +5,8 @@ Unofficial Resonite API python library.
 Based on a work by [neosvrpy](https://github.com/brodokk/neosvrpy).
 
 The code is still in WIP mode, see the files `resonitepy/classes.py` and
-`resonitepy/client.py` for how to use them.
+`resonitepy/client.py` for how to use them. The SignalR protocol is yet
+to be fully implemented.
 
 ## Usage
 
