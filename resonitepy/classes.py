@@ -147,29 +147,43 @@ class ProfileData:
     """Representation of a Resonite profile data."""
     iconUrl: Optional[str]
     tokenOutOut: Optional[List[str]]
+    displayBadges: Optional[list]
+    tagline: Optional[str]
+    description: Optional[str]
 
+
+@dataclass
+class Snapshot:
+    totalCents: int
+    patreonRawCents: int
+    deltaCents: int
+    pledgeCents: int
+    email: str
+    timestamp: str
 
 @dataclass
 class PatreonData:
     """Representation of a Resonite Patreon data."""
     isPatreonSupporter: bool
     patreonId: Optional[str]
+    lastPatreonEmail: str
+    snapshots: List[Snapshot]
     lastPatreonPledgeCents: int
     lastTotalCents: int
     minimumTotalUnits: int
     externalCents: int
     lastExternalCents: int
     hasSupported: bool
-    lastIsAnorak: bool
+    lastIsAnorak: Optional[bool] # Deprecated
     priorityIssue: int
-    lastPlusActivationTime: datetime
-    lastActivationTime: datetime
-    lastPlusPledgeAmount: int
+    lastPlusActivationTime: Optional[datetime] # Depreacted
+    lastActivationTime: Optional[datetime] # Deprecated
+    lastPlusPledgeAmount: Optional[int] # Deprecated
     lastPaidPledgeAmount: int
-    accountName: str
-    currentAccountType: int
-    currentAccountCents: int
-    pledgedAccountType: int
+    accountName: Optional[str] # Deprecated
+    currentAccountType: Optional[int] # Deprecated
+    currentAccountCents: Optional[int] # Deprecated
+    pledgedAccountType: Optional[int] # Deprecated
 
 
 @dataclass
@@ -189,9 +203,11 @@ class ResoniteUserQuotaBytesSources:
 @dataclass
 class ResoniteUserMigrationData:
     username: str
+    email: str
     userId: str
     quotaBytes: int
     usedBytes: int
+    patreonData: PatreonData
     quotaBytesSources: Optional[ResoniteUserQuotaBytesSources]
     registrationDate: datetime
 
@@ -258,19 +274,40 @@ resoniteUserEntitlementTypeMapping = {
     'storageSpace': ResoniteUserEntitlementStorageSpace,
 }
 
+
+@dataclass
+class supporterMetadataPatreon:
+    isActiveSupporter: bool
+    totalSupportMonths: int
+    totalSupportCents: int
+    lastTierCents: int
+    highestTierCents: int
+    lowestTierCents: int
+    firstSupportTimestamp: datetime
+    lastSupportTimestamp: datetime
+
+
+supporterMetadataTypeMapping = {
+    'patreon': supporterMetadataPatreon,
+}
+
+
 @dataclass
 class ResoniteUser:
     """Representation of a Resonite user."""
     id: str
     username: str
     normalizedUsername: str
+    email: str
     registrationDate: datetime
     isVerified: bool
     isLocked: bool
     supressBanEvasion: bool
-    #2fa_login: bool # TODO
+    two_fa_login: bool
     profile: Optional[ProfileData]
-    supporterMetadata: Optional[List[dict]]
+    supporterMetadata: Optional[List[
+        supporterMetadataPatreon
+    ]]
     entitlements: Optional[List[
         ResoniteUserEntitlementShoutOut |
         ResoniteUserEntitlementCredits |
@@ -563,6 +600,11 @@ class ResoniteMessage:
     sendTime: str
     recipientId: str
     messageType: ResoniteMessageType
+    senderUserSessionId: Optional[str]
+    isMigrated: bool
+    readTime: datetime
+    otherId: str
+    lastUpdateTime: datetime
     content: ResoniteMessageContentText | ResoniteMessageContentSessionInvite | ResoniteMessageContentObject | ResoniteMessageContentSound
 
 @dataclass

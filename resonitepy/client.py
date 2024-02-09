@@ -26,6 +26,7 @@ from .classes import (
     ResoniteLink,
     ResoniteRecord,
     ResoniteUser,
+    supporterMetadataTypeMapping,
     resoniteUserEntitlementTypeMapping,
     ResoniteUserEntitlementShoutOut,
     ResoniteUserEntitlementCredits,
@@ -253,6 +254,23 @@ class Client:
                         )
                     )
             response['entitlements'] = entitlements
+        if '2fa_login' in response:
+            response['two_fa_login'] = response['2fa_login']
+            del response['2fa_login']
+        if 'supporterMetadata' in response:
+            supporterMetadatas = []
+            for supporterMetadata in response['supporterMetadata']:
+                if '$type' in supporterMetadata:
+                    supporterMetadata_type = supporterMetadata['$type']
+                    del supporterMetadata['$type']
+                    supporterMetadatas.append(
+                        to_class(
+                            supporterMetadataTypeMapping[supporterMetadata_type],
+                            supporterMetadata,
+                            DACITE_CONFIG
+                        )
+                    )
+            response['supporterMetadata'] = supporterMetadatas
         return to_class(ResoniteUser, response, DACITE_CONFIG)
 
     def getSession(self, session_id: str) -> ResoniteSession:
