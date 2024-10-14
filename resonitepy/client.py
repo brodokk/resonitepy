@@ -431,6 +431,37 @@ class Client:
             response['supporterMetadata'] = supporterMetadatas
         return to_class(ResoniteUser, response, DACITE_CONFIG)
 
+    def getSessions(
+        self,
+        compatibilityHash: str = None,
+        name: str = None,
+        universeId: str = None,
+        hostName: str = None,
+        hostId: str = None,
+        minActiveUsers: int = 0,
+        includeEmptyHeadless: bool = True,
+    ) -> List[ResoniteSession]:
+        """ Retrieves all active Resonite session.
+
+        Args:
+            compatibilityHash (str): The compatibility-hash sessions needs to have. A Resonite client can only join a session if this hash matches between client and server.
+            name (str): The name of the session to search for.
+            universeId (str): The id of the universe sessions need to be part of.
+            hostName (str): The name of the user currently hosting the session.
+            hostId (str): The id of the user currently hosting the session.
+            minActiveUsers (int): he minimum amount of active users a session need to have. (default: 0)
+            includeEmptyHeadless: (bool): Should empty headless servers be included in the results. (Default: True)
+
+        Returns:
+            List[ResoniteSession]: A list of ResoniteSessions
+
+        Examples:
+            >>> client = Client()
+            >>> client.getSession()
+        """
+        response = self.request('get', '/sessions')
+        return [to_class(ResoniteSession, session, DACITE_CONFIG) for session in response]
+
     def getSession(self, session_id: str) -> ResoniteSession:
         """ Retrieves session information for the specified session ID.
 
