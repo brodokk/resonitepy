@@ -25,4 +25,5 @@ client.login(
 )
 
 user = client.getUserData()
+session = client.getSession(sessions[0].sessionId)
 platform = client.platform()

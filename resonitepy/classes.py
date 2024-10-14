@@ -568,17 +568,21 @@ class ResoniteSession:
     """ The number of active users."""
     compatibilityHash: Optional[str]
     """The compatibility hash."""
+    systemCompatibilityHash: Optional[str]
+    """The system compatibility hash."""
     correspondingWorldId: Optional[WorldId]
     """The corresponding world ID."""
     description: Optional[str]
     """The description of the session."""
+    accessLevel: str  # TODO: This should be an Enum instead
+    """The access level of the session."""
     hasEnded: bool
     """Whether the session has ended."""
     headlessHost: bool
     """Whether the host is headless."""
     hostMachineId: str
     """The machine ID of the host."""
-    hostUserSessionId: str
+    hostUserSessionId: Optional[str]
     """The user session ID of the host."""
     hostUserId: Optional[str]
     """The user ID of the host."""
@@ -604,6 +608,10 @@ class ResoniteSession:
     """The timestamp of the session begin time."""
     sessionId: str
     """The session ID."""
+    nestedSessionIds: list  # TODO: This should be a list of objects
+    """The nested session IDs."""
+    parentSessionIds: list  # TODO: This should be a list of objects
+    """The parent session IDs."""
     sessionURLs: List[str]
     """The URLs of the session."""
     sessionUsers: List[ResoniteSessionUser]
@@ -618,6 +626,7 @@ class ResoniteSession:
     """The total number of joined users."""
     hideFromListing: bool
     """Whether the session is hidden from listing."""
+    dataModelAssemblies: list  # TODO: make it an object
 
 
 @dataclass
