@@ -24,19 +24,5 @@ client.login(
     )
 )
 
-errors = []
-
-try:
-    platform = client.platform()
-except Exception as exc:
-    errors.append(
-        {
-            "class": "Plaform",
-            "error": str(exc)
-        }
-    )
-
-for error in errors:
-    print(f"Class {error['class']}")
-    print(f"    {error['error']}")
-
+user = client.getUserData()
+platform = client.platform()

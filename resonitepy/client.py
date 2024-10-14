@@ -754,4 +754,4 @@ class Client:
         """ Return information about the platform.
         """
         response = self.request('get', '/platform')
-        return dacite.from_dict(Platform, response, DACITE_CONFIG)
+        return to_class(Platform, response, DACITE_CONFIG)
