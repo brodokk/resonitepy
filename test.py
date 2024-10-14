@@ -27,4 +27,5 @@ client.login(
 user = client.getUserData()
 sessions = client.getSessions()
 session = client.getSession(sessions[0].sessionId)
+contacts = client.getContacts()
 platform = client.platform()

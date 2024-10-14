@@ -788,6 +788,7 @@ class ResoniteContact:
     isMigrated: bool
     isCounterpartMigrated: bool
     ownerId: str
+    universeId: Optional[str]
 
 class ResoniteMessageType(Enum):
     """ Enum representing a Resonite message type.
