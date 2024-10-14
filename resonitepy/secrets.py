@@ -1,11 +1,6 @@
-import random
-import string
-
+from uuid import uuid4
 
 def generate() -> str:
+    """ Generate an UUID4.
     """
-    direct reimpl of secretID.js from account.resonite.com
-    """
-    length = 12
-    valid_chars = string.ascii_letters + string.digits
-    return "".join(random.choices(valid_chars, k=length))
+    return str(uuid4())
