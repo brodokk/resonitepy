@@ -6,8 +6,6 @@ For not this script have just in mind to detect if some class have field that ar
 Usage:
     OWNERID=<Resonite U- user id> PASSWORD=<your password> python test.py
 
-TODO: Add the ability to show if a field is missing but send by resonite API
-
 """
 
 import os
@@ -16,6 +14,8 @@ from resonitepy.client import Client
 from resonitepy import classes
 
 client = Client()
+
+os.environ['DEBUG'] = 'true'
 
 client.login(
     classes.LoginDetails(
