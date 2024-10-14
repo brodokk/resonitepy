@@ -629,6 +629,9 @@ class ResoniteSession:
     hideFromListing: bool
     """Whether the session is hidden from listing."""
     dataModelAssemblies: list  # TODO: make it an object
+    """Data model assemblies."""
+    universeId: Optional[str]
+    """The universe id of the session."""
 
 
 @dataclass

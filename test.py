@@ -10,6 +10,7 @@ Usage:
 
 import os
 
+from resonitepy.classes import ResoniteDirectory, ResoniteLink
 from resonitepy.client import Client
 from resonitepy import classes
 
@@ -29,4 +30,18 @@ sessions = client.getSessions()
 session = client.getSession(sessions[0].sessionId)
 contacts = client.getContacts()
 inventory = client.getInventory()
+tested_directory = False
+tested_link = False
+for record in inventory:
+    print(type(record))
+    # TODO: test about ResoniteObject
+    if not tested_directory and isinstance(record, ResoniteDirectory):
+        directory = client.getDirectory(record)
+        tested_directory = True
+    # TODO: Can't test, brodokk doesn't have this kind of record in his inventory
+    if not tested_link and isinstance(record, ResoniteLink) and record.assetUri.path.startswith('U-'):
+        link = client.resolveLink(record)
+        tested_link = True
+    if tested_directory and tested_link:
+        break
 platform = client.platform()

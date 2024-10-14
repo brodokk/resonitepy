@@ -549,6 +549,7 @@ class Client:
         if link.assetUri.scheme != 'resrec':
             raise resonite_exceptions.ResoniteException(f'Not supported link type {link}')
         import re
+        # TODO: Add support for special resonite folder in format: `/G-Resonite/Inventory/Resonite Essential`
         m = re.search('\/(U-.*)\/(R-.*)', link.assetUri.path)
         if not m:
             raise resonite_exceptions.ResoniteException(f'Not supported link type {link}')
