@@ -976,3 +976,39 @@ class ResoniteCloudVarDefs:
     rowKey: str
     timestamp: str
     eTag: str
+
+
+@dataclass
+class Platform:
+    name: str
+    shortNamePrefix: str
+    abbreviation: str
+    domain: str
+    moderationURL: str
+    supportURL: str
+    policiesPage: str
+    email: str
+    discordInviteURL: str
+    patreonURL: str
+    webRecordEndpoint: str
+    webSessionEndpoint: str
+    groupId: str
+    teamGroupId: str
+    computeGroupId: str
+    networkGroupId: str
+    appUsername: str
+    devBotUsername: str
+    computeUsername: str
+    networkUsername: str
+    appUserId: str
+    devBotUserId: str
+    computeUserId: str
+    networkUserId: str
+    authScheme: str
+    appScheme: str
+    dbScheme: str
+    sessionScheme: str
+    recordScheme: str
+    userSessionScheme: str
+    steamAppId: str
+    discordAppId: int

@@ -44,6 +44,7 @@ from .classes import (
     ContactStatus,
     OwnerType,
     ResoniteCloudVarDefs,
+    Platform,
 )
 from .utils import getOwnerType
 
@@ -748,3 +749,9 @@ class Client:
                 user['entitlements'] = entitlements
             users.append(to_class(ResoniteUser, user, DACITE_CONFIG))
         return users
+
+    def platform(self) -> Platform:
+        """ Return information about the platform.
+        """
+        response = self._request('get', '/platform')
+        return dacite.from_dict(Platform, response, DACITE_CONFIG)
