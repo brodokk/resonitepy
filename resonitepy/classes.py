@@ -90,6 +90,8 @@ class ResoniteRecord:
     """The rating of the record."""
     ownerId: str
     """The ID of the owner of the record."""
+    isReadOnly: bool
+    """Whether the record is read only."""
 
 
 @dataclass
