@@ -612,6 +612,7 @@ class Client:
                 ResoniteMessageContentType = ResoniteMessageContentSound
             elif  message['messageType'] == 'Text':
                 ResoniteMessageContentType = ResoniteMessageContentText
+                message['content'] = {'content': message['content']}
             else:
                 raise ValueError(f'Non supported type {message["messageType"]}')
             message['content'] = to_class(

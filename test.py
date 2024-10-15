@@ -6,11 +6,14 @@ For not this script have just in mind to detect if some class have field that ar
 Usage:
     OWNERID=<Resonite U- user id> PASSWORD=<your password> python test.py
 
+TODO:
+    - Add support for field in model but not send anymore, and raise an error too
+
 """
 
 import os
 
-from resonitepy.classes import ResoniteDirectory, ResoniteLink
+from resonitepy.classes import ResoniteDirectory, ResoniteLink, ResoniteMessage, ResoniteMessageContentText
 from resonitepy.client import Client
 from resonitepy import classes
 
@@ -33,7 +36,6 @@ inventory = client.getInventory()
 tested_directory = False
 tested_link = False
 for record in inventory:
-    print(type(record))
     # TODO: test about ResoniteObject
     if not tested_directory and isinstance(record, ResoniteDirectory):
         directory = client.getDirectory(record)
@@ -44,4 +46,8 @@ for record in inventory:
         tested_link = True
     if tested_directory and tested_link:
         break
+legacy_messages = client.getMessageLegacy()
+
+
+# TODO: VERY IMPORTANT I NEED TO CONTINUE THIS AND PATCH MORE STUFF IF NEEDED BEFORE DOING A RELEASE!
 platform = client.platform()

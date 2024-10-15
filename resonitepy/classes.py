@@ -822,15 +822,12 @@ ResoniteMessageTypeMapping = {
 }
 
 
-class ResoniteMessageContentText(str):
-    """ Class representing the content of a Resonite text message.
+@dataclass
+class ResoniteMessageContentText:
+    content: str
 
-    This will return directly a string.
-    """
-
-    def __new__(cls, *args, **kw):
-        return str.__new__(cls, *args, **kw)
-
+    def __str__(self) -> str:
+        return self.content
 
 @dataclass
 class ResoniteMessageContentObject:
@@ -890,11 +887,14 @@ class ResoniteMessageContentSessionInvite:
     normalizedSessionId: str
     hostMachineId: str
     hostUsername: str
+    hostUserId: str
+    hostUserSessionId: str
     compatibilityHash: Optional[str]
     universeId: Optional[str]
     appVersion: Optional[str]
     headlessHost: Optional[bool]
     sessionURLs: List[str]
+    thumbnailUrl: Optional[str]
     parentSessionIds: Optional[List[str]]
     nestedSessionIds: Optional[List[str]]
     sessionUsers: List[ResoniteSessionUser]
@@ -909,12 +909,15 @@ class ResoniteMessageContentSessionInvite:
     lastUpdate: datetime
     accessLevel: str
     broadcastKey: Optional[str]
+    dataModelAssemblies: list  # TODO: make it an object
+    hideFromListing: bool
+    systemCompatibilityHash: str
 
 
 @dataclass
 class ResoniteMessageContentSound:
     id: str
-    OwnerId: Optional[str]
+    ownerId: Optional[str]
     assetUri: str
     globalVersion: Optional[int]
     localVersion: Optional[int]
@@ -936,6 +939,11 @@ class ResoniteMessageContentSound:
     randomOrder: int
     submissions: Optional[str]
     neosDBmanifest: Optional[list]
+    assetManifest: list  # TODO: make it an object
+    isForPatrons: bool
+    version: dict  # TODO: make it an object
+    isDeleted: bool
+    isReadOnly: Optional[bool]
 
 
 
@@ -954,7 +962,12 @@ class ResoniteMessage:
     readTime: datetime
     otherId: str
     lastUpdateTime: datetime
-    content: ResoniteMessageContentText | ResoniteMessageContentSessionInvite | ResoniteMessageContentObject | ResoniteMessageContentSound
+    content: Optional[
+        ResoniteMessageContentText
+        | ResoniteMessageContentSessionInvite
+        | ResoniteMessageContentObject
+        | ResoniteMessageContentSound
+    ]
 
 @dataclass
 class ResoniteCloudVar:
