@@ -29,6 +29,7 @@ client.login(
 )
 
 user = client.getUserData()
+user_groups = client.getMemberships()
 sessions = client.getSessions()
 session = client.getSession(sessions[0].sessionId)
 contacts = client.getContacts()
@@ -47,7 +48,9 @@ for record in inventory:
     if tested_directory and tested_link:
         break
 legacy_messages = client.getMessageLegacy()
-
+owner_path_user = client.getOwnerPath(client.userId)
+owner_path_group = client.getOwnerPath(user_groups[0].id)
+group = client.getGroup(user_groups[0].id)
 
 # TODO: VERY IMPORTANT I NEED TO CONTINUE THIS AND PATCH MORE STUFF IF NEEDED BEFORE DOING A RELEASE!
 platform = client.platform()

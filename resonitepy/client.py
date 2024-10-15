@@ -45,6 +45,8 @@ from .classes import (
     OwnerType,
     ResoniteCloudVarDefs,
     Platform,
+    ResoniteUserMembership,
+    ResoniteGroup,
 )
 from .utils import getOwnerType
 
@@ -430,6 +432,28 @@ class Client:
                     )
             response['supporterMetadata'] = supporterMetadatas
         return to_class(ResoniteUser, response, DACITE_CONFIG)
+
+    def getMemberships(self) -> List[ResoniteUserMembership]:
+        """ Retrieve current connected user group memberships.
+
+        Return
+            List[ResoniteUserMembership]: The list of groups where the user is a member.
+
+        """
+        response = self.request('get', f'/users/{self.userId}/Memberships')
+        return [to_class(ResoniteUserMembership, group, DACITE_CONFIG) for group in response]
+
+    def getGroup(self, groupId: str) -> ResoniteGroup:
+        """ Retrieve group information.
+
+        Args:
+            groupId (str): The group name starting with G-
+
+        Returns:
+            ResoniteGroup: An object with the group information
+        """
+        response = self.request('get', f'/groups/{groupId}')
+        return to_class(ResoniteGroup, response, DACITE_CONFIG)
 
     def getSessions(
         self,

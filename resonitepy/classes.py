@@ -534,6 +534,13 @@ class ResoniteUser:
     """The tags associated with the user."""
 
 @dataclass
+class ResoniteUserMembership:
+    id: str
+    groupName: str
+    isMigrated: bool
+    ownerId: str
+
+@dataclass
 class WorldId:
     """ Data class representing a World ID.
     """
@@ -542,6 +549,13 @@ class WorldId:
     """The owner ID of the world. Start with `U-`"""
     recordId: str
     """The record ID of the world."""
+
+@dataclass
+class ResoniteGroup:
+    id: str
+    adminUserId: str
+    name: str
+    isMigrated: bool
 
 @dataclass
 class ResoniteSessionUser:
