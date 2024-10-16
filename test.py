@@ -53,6 +53,16 @@ owner_path_group = client.getOwnerPath(user_groups[0].id)
 group = client.getGroup(user_groups[0].id)
 group_members = client.getGroupMembers(user_groups[0].id)
 group_member = client.getGroupMember(user_groups[0].id, group_members[0].id)
+cloud_vars = client.listCloudVar(client.userId)
+
+# TODO: Find something a bit more public (as visible and editable for everyone)
+cloud_var_def = client.getCloudVarDefs(client.userId, 'U-brodokk.avatar.config.snoot')
+cloud_var = client.getCloudVar(client.userId, 'U-brodokk.avatar.config.snoot')
+client.setCloudVar(client.userId, 'U-brodokk.avatar.config.snoot', 'true')
+client.setCloudVar(client.userId, 'U-brodokk.avatar.config.snoot', 'false')
+cloud_var = client.getCloudVar(client.userId, 'U-brodokk.avatar.config.snoot')
+
+search_result = client.searchUser('brodokk')
 
 # TODO: VERY IMPORTANT I NEED TO CONTINUE THIS AND PATCH MORE STUFF IF NEEDED BEFORE DOING A RELEASE!
 platform = client.platform()

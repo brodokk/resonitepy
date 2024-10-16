@@ -385,6 +385,40 @@ class Client:
         url = ASSETS_URL + self.resDBSignature(resUrl)
         return url
 
+    def to_resonite_user(self, data: dict) -> ResoniteUser:
+        if 'entitlements' in data:
+            entitlements = []
+            for entitlement in data['entitlements']:
+                if '$type' in entitlement:
+                    entitlement_type = entitlement['$type']
+                    del entitlement['$type']
+                    entitlements.append(
+                        to_class(
+                            resoniteUserEntitlementTypeMapping[entitlement_type],
+                            entitlement,
+                            DACITE_CONFIG
+                        )
+                    )
+            data['entitlements'] = entitlements
+        if '2fa_login' in data:
+            data['two_fa_login'] = data['2fa_login']
+            del data['2fa_login']
+        if 'supporterMetadata' in data:
+            supporterMetadatas = []
+            for supporterMetadata in data['supporterMetadata']:
+                if '$type' in supporterMetadata:
+                    supporterMetadata_type = supporterMetadata['$type']
+                    del supporterMetadata['$type']
+                    supporterMetadatas.append(
+                        to_class(
+                            supporterMetadataTypeMapping[supporterMetadata_type],
+                            supporterMetadata,
+                            DACITE_CONFIG
+                        )
+                    )
+            data['supporterMetadata'] = supporterMetadatas
+        return data
+
     def getUserData(self, user: str = None) -> ResoniteUser:
         """ Retrieves user data for the specified user.
 
@@ -401,38 +435,8 @@ class Client:
         if user is None:
             user = self.userId
         response = self.request('get', "/users/" + user)
-        if 'entitlements' in response:
-            entitlements = []
-            for entitlement in response['entitlements']:
-                if '$type' in entitlement:
-                    entitlement_type = entitlement['$type']
-                    del entitlement['$type']
-                    entitlements.append(
-                        to_class(
-                            resoniteUserEntitlementTypeMapping[entitlement_type],
-                            entitlement,
-                            DACITE_CONFIG
-                        )
-                    )
-            response['entitlements'] = entitlements
-        if '2fa_login' in response:
-            response['two_fa_login'] = response['2fa_login']
-            del response['2fa_login']
-        if 'supporterMetadata' in response:
-            supporterMetadatas = []
-            for supporterMetadata in response['supporterMetadata']:
-                if '$type' in supporterMetadata:
-                    supporterMetadata_type = supporterMetadata['$type']
-                    del supporterMetadata['$type']
-                    supporterMetadatas.append(
-                        to_class(
-                            supporterMetadataTypeMapping[supporterMetadata_type],
-                            supporterMetadata,
-                            DACITE_CONFIG
-                        )
-                    )
-            response['supporterMetadata'] = supporterMetadatas
-        return to_class(ResoniteUser, response, DACITE_CONFIG)
+        resonite_user = self.to_resonite_user(response)
+        return to_class(ResoniteUser, resonite_user, DACITE_CONFIG)
 
     def getMemberships(self) -> List[ResoniteUserMembership]:
         """ Retrieve current connected user group memberships.
@@ -813,23 +817,7 @@ class Client:
         )
         users = []
         for user in response:
-            if 'entitlements' in user:
-                entitlements = []
-                for entitlement in user['entitlements']:
-                    if entitlement['$type'] == 'shoutOut':
-                        del entitlement['$type']
-                        entitlements.append(
-                            ResoniteUserEntitlementShoutOut(**entitlement)
-                        )
-                    elif entitlement['$type'] == 'credits':
-                        del entitlement['$type']
-                        entitlements.append(
-                            ResoniteUserEntitlementCredits(**entitlement)
-                        )
-                    else:
-                        print('Warning: {entitlement["$type"]} unknown')
-                user['entitlements'] = entitlements
-            users.append(to_class(ResoniteUser, user, DACITE_CONFIG))
+            users.append(to_class(ResoniteUser, self.to_resonite_user(user), DACITE_CONFIG))
         return users
 
     def platform(self) -> Platform:

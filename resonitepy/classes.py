@@ -339,7 +339,7 @@ class ResoniteUserMigrationData:
 
     username: str
     """The username of the user."""
-    email: str
+    email: Optional[str]
     """The email of the user."""
     userId: str
     """The ID of the user."""
@@ -347,7 +347,7 @@ class ResoniteUserMigrationData:
     """The quota bytes of the user."""
     usedBytes: int
     """The used bytes of the user."""
-    patreonData: PatreonData
+    patreonData: Optional[PatreonData]
     """ The Patreon data of the user."""
     quotaBytesSources: Optional[ResoniteUserQuotaBytesSources]
     """The quota bytes sources of the user."""
@@ -499,7 +499,7 @@ class ResoniteUser:
     """The username of the user."""
     normalizedUsername: str
     """The normalized username of the user."""
-    email: str
+    email: Optional[str]
     """The email of the user."""
     registrationDate: datetime
     """The registration date of the user."""
