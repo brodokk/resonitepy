@@ -820,6 +820,22 @@ class Client:
             users.append(to_class(ResoniteUser, self.to_resonite_user(user), DACITE_CONFIG))
         return users
 
+    def getUser(self, userId: str) -> ResoniteUser:
+        """ Retrieve user directly.
+
+        Args:
+            userId (int): Ther username starting with U-
+
+        Returns:
+            ResoniteUser: The user
+        """
+        response = self.request('get', f'/users/{userId}')
+        return to_class(ResoniteUser, self.to_resonite_user(response), DACITE_CONFIG)
+
+    def getUserByName(self, userId) -> ResoniteUser:
+        reponse = self.request('get', f'/users/{userId}?byUsername=True')
+        return to_class(ResoniteUser, self.to_resonite_user(reponse), DACITE_CONFIG)
+
     def platform(self) -> Platform:
         """ Return information about the platform.
         """

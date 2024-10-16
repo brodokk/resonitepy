@@ -63,6 +63,8 @@ client.setCloudVar(client.userId, 'U-brodokk.avatar.config.snoot', 'false')
 cloud_var = client.getCloudVar(client.userId, 'U-brodokk.avatar.config.snoot')
 
 search_result = client.searchUser('brodokk')
+user = client.getUser(contacts[0].id)
+user = client.getUserByName(contacts[0].contactUsername)
 
 # TODO: VERY IMPORTANT I NEED TO CONTINUE THIS AND PATCH MORE STUFF IF NEEDED BEFORE DOING A RELEASE!
 platform = client.platform()
