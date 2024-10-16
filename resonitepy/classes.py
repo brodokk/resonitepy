@@ -558,6 +558,12 @@ class ResoniteGroup:
     isMigrated: bool
 
 @dataclass
+class ResoniteGroupMember:
+    id: str
+    isMigrated: bool
+    ownerId: str
+
+@dataclass
 class ResoniteSessionUser:
     """ Data class representing a Resonite session user.
     """

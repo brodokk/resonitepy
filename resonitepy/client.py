@@ -47,6 +47,7 @@ from .classes import (
     Platform,
     ResoniteUserMembership,
     ResoniteGroup,
+    ResoniteGroupMember,
 )
 from .utils import getOwnerType
 
@@ -450,10 +451,34 @@ class Client:
             groupId (str): The group name starting with G-
 
         Returns:
-            ResoniteGroup: An object with the group information
+            ResoniteGroup: An object with the group information.
         """
         response = self.request('get', f'/groups/{groupId}')
         return to_class(ResoniteGroup, response, DACITE_CONFIG)
+
+    def getGroupMembers(self, groupId: str) -> List[ResoniteGroupMember]:
+        """ Retrieve members from a group.
+
+        Args:
+            groupId (str): The group name starting with G-
+
+        Returns:
+            List[ResoniteGroupMember]: A list with the group members.
+        """
+        response = self.request('get', f'/groups/{groupId}/members')
+        return [to_class(ResoniteGroupMember, group_member, DACITE_CONFIG) for group_member in response]
+
+    def getGroupMember(self, groupId: str, userId: str) -> ResoniteGroupMember:
+        """ Retrieve a member from a group.
+
+        Args:
+            groupId (str): The group name starting with G-
+            userId (str): The username starting with U-
+        Returns:
+            ResoniteGroupMember: An object with the member information.
+        """
+        response = self.request('get', f'/groups/{groupId}/members/{userId}')
+        return to_class(ResoniteGroupMember, response, DACITE_CONFIG)
 
     def getSessions(
         self,

@@ -51,6 +51,8 @@ legacy_messages = client.getMessageLegacy()
 owner_path_user = client.getOwnerPath(client.userId)
 owner_path_group = client.getOwnerPath(user_groups[0].id)
 group = client.getGroup(user_groups[0].id)
+group_members = client.getGroupMembers(user_groups[0].id)
+group_member = client.getGroupMember(user_groups[0].id, group_members[0].id)
 
 # TODO: VERY IMPORTANT I NEED TO CONTINUE THIS AND PATCH MORE STUFF IF NEEDED BEFORE DOING A RELEASE!
 platform = client.platform()
