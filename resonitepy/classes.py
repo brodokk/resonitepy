@@ -433,7 +433,7 @@ class ResoniteUserEntitlementStorageSpace:
 
     bytes: int
     """The amount of storage space in bytes."""
-    maximumShareLevel: int
+    maximumShareLevel: str
     """The maximum share level."""
     storageId: str
     """The ID of the storage space."""
@@ -979,7 +979,7 @@ class ResoniteMessage:
     messageType: ResoniteMessageType
     senderUserSessionId: Optional[str]
     isMigrated: bool
-    readTime: datetime
+    readTime: Optional[datetime]
     otherId: str
     lastUpdateTime: datetime
     content: Optional[
