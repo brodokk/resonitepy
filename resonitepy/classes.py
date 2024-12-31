@@ -375,6 +375,8 @@ class ResoniteUserEntitlementCredits:
     """The type of the credit."""
     friendlyDescription: str
     """The friendly description of the credit."""
+    entitlementOrigins: list[str]
+    """The entitlement origins."""
 
 
 @dataclass
@@ -384,13 +386,17 @@ class ResoniteUserEntitlementGroupCreation:
 
     groupCount: int
     """The number of groups the user is entitled to create."""
+    entitlementOrigins: list[str]
+    """The entitlement origins."""
 
 
 @dataclass
 class ResoniteEntitlementDeleteRecovery:
     """ Data class representing the entitlement for deleting recovery data in Resonite.
     """
-    pass
+
+    entitlementOrigins: list[str]
+    """The entitlement origins."""
 
 
 @dataclass
@@ -402,6 +408,8 @@ class ResoniteUserEntitlementBadge:
     """The type of the badge."""
     badgeCount: int
     """The count of the badge."""
+    entitlementOrigins: list[str]
+    """The entitlement origins."""
 
 
 @dataclass
@@ -411,6 +419,8 @@ class ResoniteUserEntitlementHeadless:
 
     friendlyDescription: str
     """The friendly description of the headless entitlement."""
+    entitlementOrigins: list[str]
+    """The entitlement origins."""
 
 
 @dataclass
@@ -424,6 +434,8 @@ class ResoniteUserEntitlementExitMessage:
     """The count of exit messages."""
     friendlyDescription: str
     """The friendly description of the exit message entitlement."""
+    entitlementOrigins: list[str]
+    """The entitlement origins."""
 
 
 @dataclass
@@ -447,6 +459,8 @@ class ResoniteUserEntitlementStorageSpace:
     """The name of the storage space."""
     description: str
     """The description of the storage space."""
+    entitlementOrigins: list[str]
+    """The entitlement origins."""
 
 resoniteUserEntitlementTypeMapping = {
     'shoutOut': ResoniteUserEntitlementShoutOut,
@@ -880,6 +894,8 @@ class ResoniteMessageContentObject:
     """Whether the object is for patrons."""
     isListed: bool
     """Whether the object is listed."""
+    isReadOnly: bool
+    """Whether the object is read-only."""
     lastModificationTime: datetime
     """The timestamp of the last modification."""
     creationTime: datetime
@@ -894,7 +910,7 @@ class ResoniteMessageContentObject:
     """The rating of the object."""
     randomOrder: int
     """The random order of the object."""
-    sumbissions: Optional[str]
+    submissions: Optional[str]
     """The submissions of the object."""
 
 @dataclass
