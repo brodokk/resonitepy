@@ -21,10 +21,15 @@ client = Client()
 
 os.environ['DEBUG'] = 'true'
 
+import tomllib
+
+with open("testconf.toml", mode="rb") as fp:
+    config = tomllib.load(fp)
+
 client.login(
     classes.LoginDetails(
-        ownerId=os.environ.get('OWNERID'),
-        authentication=classes.LoginDetailsAuth(password=os.environ.get('PASSWORD')),
+        ownerId=config.get('owner_id'),
+        authentication=classes.LoginDetailsAuth(password=config.get('password')),
     )
 )
 
