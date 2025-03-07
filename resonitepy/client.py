@@ -32,6 +32,7 @@ from .classes import (
     ResoniteMessage,
     ResoniteMessageType,
     ResoniteMessageContentSessionInvite,
+    ResoniteMessageContentRequestInvite,
     ResoniteMessageContentObject,
     ResoniteMessageContentSound,
     ResoniteMessageContentText,
@@ -657,6 +658,9 @@ class Client:
             if message['messageType'] == 'SessionInvite':
                 message['content'] = json.loads(message['content'])
                 ResoniteMessageContentType = ResoniteMessageContentSessionInvite
+            elif message['messageType'] == 'InviteRequest':
+                message['content'] = json.loads(message['content'])
+                ResoniteMessageContentType = ResoniteMessageContentRequestInvite
             elif message['messageType'] == 'Object':
                 message['content'] = json.loads(message['content'])
                 ResoniteMessageContentType = ResoniteMessageContentObject

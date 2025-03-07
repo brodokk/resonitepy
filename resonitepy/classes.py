@@ -841,6 +841,8 @@ class ResoniteMessageType(Enum):
     """Audio type message."""
     SESSIONINVITE = "SessionInvite"
     """Session invite type message."""
+    INVITEREQUEST = "InviteRequest"
+    """Invite request type message."""
     CREDITTRANSFER = "CreditTransfer"
     """Credit transfert type message."""
     SUGARCUBES = "SugarCubes"
@@ -851,6 +853,7 @@ ResoniteMessageTypeMapping = {
     ResoniteMessageType.OBJECT: "Object",
     ResoniteMessageType.SOUND: "Sound",
     ResoniteMessageType.SESSIONINVITE: "SessionInvite",
+    ResoniteMessageType.INVITEREQUEST: "InviteRequest",
     ResoniteMessageType.CREDITTRANSFER: "CreditTransfer",
     ResoniteMessageType.SUGARCUBES: "SugarCubes",
 }
@@ -949,6 +952,18 @@ class ResoniteMessageContentSessionInvite:
     hideFromListing: bool
     systemCompatibilityHash: str
 
+@dataclass
+class ResoniteMessageContentRequestInvite:
+    inviteRequestId: str
+    userIdToInvite: str
+    usernameToInvite: str
+    requestingFromUserId: str
+    requestingFromUsername: str
+    forSessionId: Optional[str]
+    forSessionName: Optional[str]
+    isContactOfHost: Optional[str]
+    response: Optional[str]
+    invite: Optional[str]
 
 @dataclass
 class ResoniteMessageContentSound:
@@ -1001,6 +1016,7 @@ class ResoniteMessage:
     content: Optional[
         ResoniteMessageContentText
         | ResoniteMessageContentSessionInvite
+        | ResoniteMessageContentRequestInvite
         | ResoniteMessageContentObject
         | ResoniteMessageContentSound
     ]
