@@ -136,8 +136,11 @@ class Client:
     lastUpdate: datetime = None
     secretMachineIdHash: str = None
     secretMachineIdSalt: str = None
-    session: Session = Session()
-    session.headers['UID'] = sha256(os.urandom(16)).hexdigest().upper()
+    session: Session = None
+
+    def __init__(self):
+        self.session = Session()
+        self.session.headers['UID'] = sha256(os.urandom(16)).hexdigest().upper()
 
     @property
     def headers(self) -> dict:
