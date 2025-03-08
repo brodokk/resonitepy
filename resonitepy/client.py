@@ -2,19 +2,21 @@
 This module defines the Resonite client, which interacts with the Resonite API.
 """
 
+import re
+import json
 import os
 import dataclasses
 import json
 import logging
 from datetime import datetime
 from hashlib import sha256
-from os import path as OSpath
+from os import path
 from typing import Dict, List
 from urllib.parse import ParseResult, urlparse
 
 import dacite
-from requests import Session
-from requests import exceptions as requests_exceptions
+import requests
+from requests.exceptions import JSONDecodeError as RequestsJSONDecodeError
 from dateutil.parser import isoparse
 
 from . import __version__
@@ -51,11 +53,21 @@ from .classes import (
     ResoniteGroupMember,
 )
 from .utils import getOwnerType
-
 from .endpoints import API_URL, ASSETS_URL
 from resonitepy import exceptions as resonite_exceptions
+from resonitepy.exceptions import (
+    InvalidCredentials as ResoniteInvalidCredentials,
+    InvalidToken as ResoniteInvalidToken,
+    NoTokenError as ResoniteNoTokenError,
+    ResoniteAPIException,
+    ResoniteException,
+)
 
 logger = logging.getLogger(__name__)
+
+AUTHFILE_NAME = "auth.token"
+# From PolyLogix/CloudX.js, the token seems to expire after 3600000 seconds (1 hour)
+TOKEN_EXPIRY_SECONDS = 3600000
 
 try:
     DEBUG = json.loads(os.environ.get('DEBUG', 'False').lower())
@@ -79,8 +91,6 @@ DACITE_CONFIG = dacite.Config(
     strict_unions_match=DEBUG,
 )
 
-AUTHFILE_NAME = "auth.token"
-
 def to_class(data_class: type , data: dict, config: dacite.Config) -> object:
     """ Converts a dictionary to an instance of the specified data class.
 
@@ -103,7 +113,7 @@ def to_class(data_class: type , data: dict, config: dacite.Config) -> object:
     try:
         return dacite.from_dict(data_class, data, config)
     except Exception as exc:
-        logger.error(f'Error for class {data_class.__name__}')
+        logger.error(f'Error converting to class {data_class.__name__}')
         if DEBUG:
             logger.debug("With data:")
             logger.debug(data)
@@ -116,7 +126,7 @@ class Client:
     This class provides methods for interacting with the Resonite API.
 
     Attributes:
-        userId (str): The ID of the user associated with the client. In the Resonite `U-` format.
+        userId (str): The ID of the user associated with the client (in the Resonite `U-` format).
         token (str): The authentication token for the client.
         expire (str): The expiration date of the authentication token. (Not used by the API)
         rememberMe (bool): Whether to remember the client's session. (default: False)
@@ -138,10 +148,11 @@ class Client:
     lastUpdate: datetime = None
     secretMachineIdHash: str = None
     secretMachineIdSalt: str = None
-    session: Session = None
+    session: requests.Session = None
 
     def __init__(self):
-        self.session = Session()
+        """Initialize a new Resonite API client instance."""
+        self.session = requests.Session()
         self.session.headers['UID'] = sha256(os.urandom(16)).hexdigest().upper()
 
     @property
@@ -157,31 +168,19 @@ class Client:
         """
         default = {"User-Agent": f"resonitepy/{__version__}"}
         if not self.userId or not self.token:
-            logger.warning("WARNING: headers sections not set. this might throw an error soon...")
+            logger.warning("Headers not properly set. API requests might throw an error soon...")
             return default
         default["Authorization"] = f"res {self.userId}:{self.token}"
         return default
 
-    @staticmethod
-    def processRecordList(data: List[dict]) -> [ResoniteRecord]:
-        """ Processes a list of raw records and returns a list of ResoniteRecord objects.
-
-        Args:
-            data: A list of dictionaries representing the raw records.
-
-        Returns:
-            A list of ResoniteRecord objects.
-        """
-        ret = []
-        for raw_item in data:
-            item = to_class(ResoniteRecord, raw_item, DACITE_CONFIG)
-            x = to_class(recordTypeMapping[item.recordType], raw_item, DACITE_CONFIG)
-            ret.append(x)
-        return ret
-
     def request(
-            self, verb: str, path: str, data: dict = None, json: dict = None,
-            params: dict = None, ignoreUpdate: bool = False
+            self,
+            verb: str,
+            path: str,
+            data: dict = None,
+            json: dict = None,
+            params: dict = None,
+            ignoreUpdate: bool = False
         ) -> Dict:
         """ Sends an API request and returns the response.
 
@@ -209,46 +208,55 @@ class Client:
             >>> client = Client()
             >>> response = client.request('get', '/users/U-foxxie')
         """
+
+        # Check if session needs to be refreshed
         if self.lastUpdate and not ignoreUpdate:
             lastUpdate = self.lastUpdate
-            # From PolyLogix/CloudX.js, the token seems to expire after 3600000 seconds
-            if (datetime.now() - lastUpdate).total_seconds() <= 3600000:
+            if (datetime.now() - lastUpdate).total_seconds() <= TOKEN_EXPIRY_SECONDS:
                 self.request('patch', '/userSessions', ignoreUpdate=True)
                 self.lastUpdate = datetime.now()
-            # While the API dont seems to implement more security, official client behavior must be respected.
-            # Only disconnect after 1 day of inactivity for now.
             # TODO: Implement disconnection after 1 week of inactivity when implementing the rememberMe feature.
             #if 64800 >= (datetime.now() - lastUpdate).total_seconds() >= 85536:
             #    self.request('patch', '/userSessions', ignoreUpdate=True)
             else:
                 raise resonite_exceptions.InvalidToken("Token expired")
+
+        # Prepare request arguments
         args = {'url': API_URL + path}
         if data: args['data'] = data
         if json: args['json'] = json
         if params: args['params'] = params
+
+        # Execute the request
         func = getattr(self.session, verb, None)
+
         with func(**args) as req:
             logger.debug("ResoniteAPI: [{}] {}".format(req.status_code, args))
+
+            # Handle error responses
             if req.status_code not in [200, 204]:
                 if "Invalid credentials" in req.text:
-                    raise resonite_exceptions.InvalidCredentials(req.text)
+                    raise ResoniteInvalidCredentials(req.text)
                 elif req.status_code == 403:
-                    raise resonite_exceptions.InvalidToken(req.headers)
+                    raise ResoniteInvalidToken(req.headers)
                 else:
-                    raise resonite_exceptions.ResoniteAPIException(req)
+                    raise ResoniteAPIException(req)
+
+            # Handle successful responses
             if req.status_code == 200:
                 try:
                     response = req.json()
                     if "message" in response:
-                        raise resonite_exceptions.ResoniteAPIException(req, message=response["message"])
+                        raise ResoniteAPIException(req, message=response["message"])
                     return response
-                except requests_exceptions.JSONDecodeError:
+                except RequestsJSONDecodeError:
                     return req.text
+
             # In case of a 204 response
             return
 
     def login(self, data: LoginDetails) -> None:
-        """ Logs in the client with the provided login details.
+        """ Log in to the Resonite API with the provided login details.
 
         Args:
             data (LoginDetails): The login details.
@@ -261,19 +269,27 @@ class Client:
             >>> login_details = LoginDetails(username='foxxie', password='pass')
             >>> client.login(login_details)
         """
-        json=dataclasses.asdict(data)
-        json['authentication'] = data.authentication.build_dict()
-        response = self.request('post', "/userSessions", json=json)
-        self.userId = response["entity"]["userId"]
-        self.token = response["entity"]["token"]
-        self.secretMachineIdHash = response["entity"]["secretMachineIdHash"]
-        self.secretMachineIdSalt = response["entity"]["secretMachineIdSalt"]
-        self.expire = isoparse(response["entity"]["expire"])
+        payload = dataclasses.asdict(data)
+        payload['authentication'] = data.authentication.build_dict()
+
+        response = self.request('post', "/userSessions", json=payload)
+        if not response:
+            raise ResoniteException("Login failed - empty response")
+
+        entity = response.get("entity", {})
+        self.userId = entity.get("userId")
+        self.token = entity.get("token")
+        self.secretMachineIdHash = entity.get("secretMachineIdHash")
+        self.secretMachineIdSalt = entity.get("secretMachineIdSalt")
+
+        if "expire" in entity:
+            self.expire = isoparse(entity["expire"])
+
         self.lastUpdate = datetime.now()
         self.session.headers.update(self.headers)
 
     def logout(self) -> None:
-        """ Logs out the client.
+        """ Log out the current session.
 
         Returns:
             None
@@ -282,14 +298,16 @@ class Client:
             >>> client = Client()
             >>> client.logout()
         """
-        self.request('delete',
-            "/userSessions/{}/{}".format(self.userId, self.token),
-            ignoreUpdate=True,
-        )
+        if self.userId and self.token:
+            self.request(
+                'delete',
+                "/userSessions/{}/{}".format(self.userId, self.token),
+                ignoreUpdate=True,
+            )
         self.clean_session()
 
     def clean_session(self) -> None:
-        """ Cleans the client's session.
+        """ Clean the client's session datas.
 
         Returns:
             None
@@ -304,37 +322,43 @@ class Client:
         self.secretMachineIdHash = None
         self.secretMachineIdSalt = None
         self.lastUpdate = None
-        del self.session.headers["Authorization"]
+
+        if "Authorization" in self.session.headers:
+            del self.session.headers["Authorization"]
         self.session.headers.update(self.headers)
 
     def load_token(self) -> None:
-        """ Loads the authentication token from a file.
+        """ Load the authentication token from a file.
 
         Returns:
             None
 
         Raises:
-            resonite_exceptions.NoTokenError: If the token file does not exist or the token has expired.
+            ResoniteNoTokenError: If the token file does not exist or the token has expired.
 
         Examples:
             >>> client = Client()
             >>> client.load_token()
         """
-        if OSpath.exists(AUTHFILE_NAME):
-            with open(AUTHFILE_NAME, "r") as f:
+        if not path.exists(AUTHFILE_NAME):
+            raise ResoniteNoTokenError("Auth token file not found.")
+
+        with open(AUTHFILE_NAME, "r") as f:
+            try:
                 session = json.load(f)
-                expire = datetime.fromisoformat(session["expire"])
+                expire = datetime.fromisoformat(session.get("expire", ""))
+
                 if datetime.now().timestamp() < expire.timestamp():
-                    self.token = session["token"]
-                    self.userId = session["userId"]
+                    self.token = session.get("token")
+                    self.userId = session.get("userId")
                     self.expire = expire
-                    self.secretMachineIdHash = session["secretMachineIdHash"]
-                    self.secretMachineIdSalt = session["secretMachineIdSalt"]
+                    self.secretMachineIdHash = session.get("secretMachineIdHash")
+                    self.secretMachineIdSalt = session.get("secretMachineIdSalt")
                     self.session.headers.update(self.headers)
                 else:
-                    raise resonite_exceptions.NoTokenError
-        else:
-            raise resonite_exceptions.NoTokenError
+                    raise ResoniteNoTokenError
+            except (json.JSONDecodeError, ValueError):
+                raise ResoniteNoTokenError("Invalid auth token file format.")
 
     def save_token(self) -> None:
         """ Saves the authentication token to a file.
@@ -346,6 +370,10 @@ class Client:
             >>> client = Client()
             >>> client.save_token()
         """
+        if not all([self.userId, self.token, self.expire]):
+            logger.warning("Cannot save token - missing required authentication data")
+            return
+
         with open(AUTHFILE_NAME, "w+") as f:
             json.dump(
                 {
@@ -372,7 +400,10 @@ class Client:
             >>> client = Client()
             >>> signature = client.resDBSignature("resrec://U-123/R-456")
         """
-        return resUrl.split("//")[1].split(".")[0]
+        parts = resUrl.split("//")
+        if len(parts) > 2:
+            raise ValueError(f"Invalid Resonite URL format: {resUrl}")
+        return resUrl.parts[1].split(".")[0]
 
     def resDbToHttp(self, resUrl: str) -> str:
         """  Converts a Resonite URL to an HTTP URL.
@@ -388,10 +419,27 @@ class Client:
             >>> client = Client()
             >>> http_url = client.resDbToHttp("resrec://U-123/R-456")
         """
-        url = ASSETS_URL + self.resDBSignature(resUrl)
-        return url
+        return ASSETS_URL + self.resDBSignature(resUrl)
 
-    def to_resonite_user(self, data: dict) -> ResoniteUser:
+    @staticmethod
+    def processRecordList(data: List[dict]) -> List[ResoniteRecord]:
+        """ Processes a list of raw records and returns a list of ResoniteRecord objects.
+
+        Args:
+            data: A list of dictionaries representing the raw records.
+
+        Returns:
+            A list of ResoniteRecord objects.
+        """
+        result = []
+        for raw_item in data:
+            item = to_class(ResoniteRecord, raw_item, DACITE_CONFIG)
+            x = to_class(recordTypeMapping[item.recordType], raw_item, DACITE_CONFIG)
+            result.append(x)
+        return result
+
+    def to_resonite_user(self, data: dict) -> dict:
+
         if 'entitlements' in data:
             entitlements = []
             for entitlement in data['entitlements']:
@@ -406,23 +454,26 @@ class Client:
                         )
                     )
             data['entitlements'] = entitlements
+
         if '2fa_login' in data:
             data['two_fa_login'] = data['2fa_login']
             del data['2fa_login']
+
         if 'supporterMetadata' in data:
-            supporterMetadatas = []
+            supporter_metadata = []
             for supporterMetadata in data['supporterMetadata']:
                 if '$type' in supporterMetadata:
                     supporterMetadata_type = supporterMetadata['$type']
                     del supporterMetadata['$type']
-                    supporterMetadatas.append(
+                    supporter_metadata.append(
                         to_class(
                             supporterMetadataTypeMapping[supporterMetadata_type],
                             supporterMetadata,
                             DACITE_CONFIG
                         )
                     )
-            data['supporterMetadata'] = supporterMetadatas
+            data['supporterMetadata'] = supporter_metadata
+
         return data
 
     def getUserData(self, user: str = None) -> ResoniteUser:
@@ -439,10 +490,13 @@ class Client:
             >>> user_data = client.getUserData()
         """
         if user is None:
+            if not self.userId:
+                logger.error("No user ID provided and client not logged in.")
             user = self.userId
-        response = self.request('get', "/users/" + user)
-        resonite_user = self.to_resonite_user(response)
-        return to_class(ResoniteUser, resonite_user, DACITE_CONFIG)
+
+        response = self.request('get', f"/users/{user}")
+        processed_data = self.to_resonite_user(response)
+        return to_class(ResoniteUser, processed_data, DACITE_CONFIG)
 
     def getMemberships(self) -> List[ResoniteUserMembership]:
         """ Retrieve current connected user group memberships.
@@ -451,6 +505,9 @@ class Client:
             List[ResoniteUserMembership]: The list of groups where the user is a member.
 
         """
+        if not self.userId:
+            logger.error("Client not logged in")
+
         response = self.request('get', f'/users/{self.userId}/Memberships')
         return [to_class(ResoniteUserMembership, group, DACITE_CONFIG) for group in response]
 
@@ -518,6 +575,7 @@ class Client:
             >>> client = Client()
             >>> client.getSession()
         """
+        # TODO: Implement the search for the sessions
         response = self.request('get', '/sessions')
         return [to_class(ResoniteSession, session, DACITE_CONFIG) for session in response]
 
@@ -607,13 +665,17 @@ class Client:
         """
         if link.assetUri.scheme != 'resrec':
             raise resonite_exceptions.ResoniteException(f'Not supported link type {link}')
-        import re
+
         # TODO: Add support for special resonite folder in format: `/G-Resonite/Inventory/Resonite Essential`
-        m = re.search('\/(U-.*)\/(R-.*)', link.assetUri.path)
-        if not m:
+        pattern = r'\/(U-.*)\/(R-.*)'
+        match = re.search(pattern, link.assetUri.path)
+
+        if not match:
             raise resonite_exceptions.ResoniteException(f'Not supported link type {link}')
-        user = m.group(1)
-        record = m.group(2)
+
+        user = match.group(1)
+        record = match.group(2)
+
         response = self.request(
             'get',
             f"/users/{user}/records/{record}",
@@ -622,8 +684,11 @@ class Client:
 
 
     def getMessageLegacy(
-        self, fromTime: str = None, maxItems: int = 100,
-        user: str = None, unreadOnly: bool = False
+        self,
+        fromTime: str = None,
+        maxItems: int = 100,
+        user: str = None,
+        unreadOnly: bool = False
     ) -> List[ResoniteMessage]:
         """ Retrieves a list of Resonite messages.
 
@@ -646,18 +711,26 @@ class Client:
             >>> client = ResoniteClient()
             >>> messages = client.getMessageLegacy(maxItems=50, unreadOnly=True)
         """
-        params = {}
         if fromTime:
-            raise ValueError('fromTime is not yet implemented')
-        params['maxItems'] = maxItems
-        params['unreadOnly'] = unreadOnly
+            raise ValueError('fromTime parameter is not yet implemented')
+
+        if not self.userId:
+            logger.error("Client not logged in")
+
+        params = {
+            "maxItems": maxItems,
+            "unreadOnly": unreadOnly,
+        }
+
         if user:
             params['user'] = user
+
         response = self.request(
             'get',
             f'/users/{self.userId}/messages',
             params=params
         )
+
         messages = []
         for message in response:
             if message['messageType'] == 'SessionInvite':
@@ -677,12 +750,15 @@ class Client:
                 message['content'] = {'content': message['content']}
             else:
                 raise ValueError(f'Non supported type {message["messageType"]}')
+
             message['content'] = to_class(
                 ResoniteMessageContentType, message['content'], DACITE_CONFIG
             )
+
             messages.append(
                 to_class(ResoniteMessage, message, DACITE_CONFIG)
             )
+
         return messages
 
     def getOwnerPath(self, ownerId: str) -> str:
@@ -769,13 +845,16 @@ class Client:
             "ownerId": ownerId,
             "path": path,
         }]
+
         response = self.request(
             'post',
             f'/readvars',
             json=json,
         )
+
         if not response:
-            raise resonite_exceptions.ResoniteException(f"{ownerId} {path} doesn't exist")
+            raise ResoniteException(f"{ownerId} {path} doesn't exist")
+
         return to_class(ResoniteCloudVarDefs, response[0]['definition'], DACITE_CONFIG)
 
     def setCloudVar(self, ownerId: str, path: str, value: str) -> None:
