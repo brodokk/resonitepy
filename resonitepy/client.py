@@ -55,10 +55,12 @@ from .utils import getOwnerType
 from .endpoints import API_URL, ASSETS_URL
 from resonitepy import exceptions as resonite_exceptions
 
+logger = logging.getLogger(__name__)
+
 try:
     DEBUG = json.loads(os.environ.get('DEBUG', 'False').lower())
 except json.decoder.JSONDecodeError:
-    print("Debug must be True or False")
+    logger.error("Debug must be True or False")
     exit(1)
 
 DACITE_CONFIG = dacite.Config(
@@ -101,11 +103,11 @@ def to_class(data_class: type , data: dict, config: dacite.Config) -> object:
     try:
         return dacite.from_dict(data_class, data, config)
     except Exception as exc:
-        print(f'Error for class {data_class.__name__}')
+        logger.error(f'Error for class {data_class.__name__}')
         if DEBUG:
-            print("With data:")
-            print(data)
-        print(exc)
+            logger.debug("With data:")
+            logger.debug(data)
+        logger.error(exc)
 
 @dataclasses.dataclass
 class Client:
@@ -155,7 +157,7 @@ class Client:
         """
         default = {"User-Agent": f"resonitepy/{__version__}"}
         if not self.userId or not self.token:
-            logging.warning("WARNING: headers sections not set. this might throw an error soon...")
+            logger.warning("WARNING: headers sections not set. this might throw an error soon...")
             return default
         default["Authorization"] = f"res {self.userId}:{self.token}"
         return default
@@ -226,7 +228,7 @@ class Client:
         if params: args['params'] = params
         func = getattr(self.session, verb, None)
         with func(**args) as req:
-            logging.debug("ResoniteAPI: [{}] {}".format(req.status_code, args))
+            logger.debug("ResoniteAPI: [{}] {}".format(req.status_code, args))
             if req.status_code not in [200, 204]:
                 if "Invalid credentials" in req.text:
                     raise resonite_exceptions.InvalidCredentials(req.text)
