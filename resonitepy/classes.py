@@ -532,7 +532,7 @@ class ResoniteUser:
     profile: Optional[ProfileData]
     """The profile data of the user."""
     supporterMetadata: Optional[List[
-        supporterMetadataPatreon.
+        supporterMetadataPatreon,
         supporterMetadataStripe,
     ]]
     """The Patreon supporter metadata of the user."""
