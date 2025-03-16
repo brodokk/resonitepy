@@ -495,12 +495,14 @@ class supporterMetadataPatreon:
     """The timestamp of the first support."""
     lastSupportTimestamp: datetime
     """The timestamp of the last support."""
-    stripe: Optional[str]
-    """The stripe support information."""
 
+@dataclass
+class supporterMetadataStripe:
+    pass
 
 supporterMetadataTypeMapping = {
     'patreon': supporterMetadataPatreon,
+    'stripe': supporterMetadataStripe,
 }
 
 
