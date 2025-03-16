@@ -52,7 +52,7 @@ from .classes import (
     ResoniteGroup,
     ResoniteGroupMember,
 )
-from .utils import getOwnerType
+from .utils import getOwnerType, deprecated_alias
 from .endpoints import API_URL, ASSETS_URL
 from resonitepy import exceptions as resonite_exceptions
 from resonitepy.exceptions import (
@@ -386,6 +386,25 @@ class Client:
                 f,
             )
 
+    def res_db_signature(self, res_url: str) -> str:
+        """ Returns the Resonite DB signature from a Resonite URL.
+
+        Args:
+            reres_url (url): The Resonite URL.
+
+        Returns:
+            str: The Resonite DB signature.
+
+        Examples:
+            >>> client = Client()
+            >>> signature = client.res_db_signature("resrec://U-123/R-456")
+        """
+        parts = res_url.split("//")
+        if len(parts) > 2:
+            raise ValueError(f"Invalid Resonite URL format: {res_url}")
+        return parts[1].split(".")[0]
+
+    @deprecated_alias(res_db_signature)
     def resDBSignature(self, resUrl: str) -> str:
         """ Returns the Resonite DB signature from a Resonite URL.
 
@@ -395,16 +414,29 @@ class Client:
         Returns:
             str: The Resonite DB signature.
 
-        # TODO: Fix example
         Examples:
             >>> client = Client()
             >>> signature = client.resDBSignature("resrec://U-123/R-456")
         """
-        parts = resUrl.split("//")
-        if len(parts) > 2:
-            raise ValueError(f"Invalid Resonite URL format: {resUrl}")
-        return resUrl.parts[1].split(".")[0]
+        return self.res_db_signature(res_url=resUrl)
 
+    def res_db_to_http(self, res_url: str) -> str:
+        """  Converts a Resonite URL to an HTTP URL.
+
+        Args:
+            res_url (str): The Resonite URL.
+
+        Returns:
+            str: The HTTP URL.
+
+        # TODO: Fix example
+        Examples:
+            >>> client = Client()
+            >>> http_url = client.res_db_signature("resrec://U-123/R-456")
+        """
+        return f"{ASSETS_URL.strip('/')}/{self.res_db_signature(res_url)}"
+
+    @deprecated_alias(res_db_to_http)
     def resDbToHttp(self, resUrl: str) -> str:
         """  Converts a Resonite URL to an HTTP URL.
 
@@ -414,15 +446,14 @@ class Client:
         Returns:
             str: The HTTP URL.
 
-        # TODO: Fix example
         Examples:
             >>> client = Client()
             >>> http_url = client.resDbToHttp("resrec://U-123/R-456")
         """
-        return ASSETS_URL + self.resDBSignature(resUrl)
+        return self.res_db_to_http(res_url=resUrl)
 
     @staticmethod
-    def processRecordList(data: List[dict]) -> List[ResoniteRecord]:
+    def process_record_ist(data: List[dict]) -> List[ResoniteRecord]:
         """ Processes a list of raw records and returns a list of ResoniteRecord objects.
 
         Args:
@@ -434,9 +465,23 @@ class Client:
         result = []
         for raw_item in data:
             item = to_class(ResoniteRecord, raw_item, DACITE_CONFIG)
+            print(recordTypeMapping[item.recordType])
             x = to_class(recordTypeMapping[item.recordType], raw_item, DACITE_CONFIG)
             result.append(x)
         return result
+
+    @staticmethod
+    @deprecated_alias(process_record_ist)
+    def processRecordList(data: list[dict]) -> List[ResoniteRecord]:
+        """ Processes a list of raw records and returns a list of ResoniteRecord objects.
+
+        Args:
+            data: A list of dictionaries representing the raw records.
+
+        Returns:
+            A list of ResoniteRecord objects.
+        """
+        return Client.process_record_ist(data=data)
 
     def to_resonite_user(self, data: dict) -> dict:
 

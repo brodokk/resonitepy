@@ -481,6 +481,8 @@ class supporterMetadataPatreon:
 
     isActiveSupporter: bool
     """Whether the user is an active supporter."""
+    isActive: bool
+    """Whether the user is an active."""
     totalSupportMonths: int
     """The total number of months of support."""
     totalSupportCents: int

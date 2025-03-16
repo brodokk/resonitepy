@@ -19,6 +19,12 @@ dacite = "^1.6.0"
 
 [tool.poetry.dev-dependencies]
 pdoc3 = "^0.10.0"
+pytest = "^8.3.5"
+pytest-mock = "^3.14.0"
+pytest-cov = "^2.12.1"
+
+[tool.poetry.scripts]
+test = "run_tests:main"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
