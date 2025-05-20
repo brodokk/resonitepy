@@ -72,23 +72,29 @@ def client():
 #         client.login(login_details)
 
 def test_res_db_signature(client):
-    res_url = "resrec://U-123/R-456"
-    expected_signature = "U-123/R-456"
+    resrec_url = "resrec://U-123/R-456"
+    expected_resrec_signature = "U-123/R-456"
 
-    result = client.res_db_signature(res_url=res_url)
+    assert client.res_db_signature(res_url=resrec_url) == expected_resrec_signature
 
-    assert result == expected_signature
+    resdb_url = "resdb:///grs4587f4659696ca9c67edf89ee7g1289rsw5sz478e81gh6rs458.pdf"
+    expected_resdb_signature = "grs4587f4659696ca9c67edf89ee7g1289rsw5sz478e81gh6rs458"
+
+    assert client.res_db_signature(res_url=resdb_url) == expected_resdb_signature
 
 def test_resDBSignature(client, recwarn):
-    res_url = "resrec://U-123/R-456"
-    expected_signature = "U-123/R-456"
+    resrec_url = "resrec://U-123/R-456"
+    expected_resrec_signature = "U-123/R-456"
 
-    result = client.resDBSignature(resUrl=res_url)
+    assert client.resDBSignature(resUrl=resrec_url) == expected_resrec_signature
 
-    assert result == expected_signature
+    resdb_url = "resdb:///grs4587f4659696ca9c67edf89ee7g1289rsw5sz478e81gh6rs458.pdf"
+    expected_resdb_signature = "grs4587f4659696ca9c67edf89ee7g1289rsw5sz478e81gh6rs458"
+
+    assert client.resDBSignature(resUrl=resdb_url) == expected_resdb_signature
 
     # Check that DeprecationWarning was raised
-    assert len(recwarn) == 1
+    assert len(recwarn) == 2
     assert issubclass(recwarn[0].category, DeprecationWarning)
     assert "resDBSignature is deprecated; please use res_db_signature instead." == str(recwarn[0].message)
 

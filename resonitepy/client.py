@@ -399,7 +399,7 @@ class Client:
             >>> client = Client()
             >>> signature = client.res_db_signature("resrec://U-123/R-456")
         """
-        parts = res_url.split("//")
+        parts = re.split("//+", res_url)
         if len(parts) > 2:
             raise ValueError(f"Invalid Resonite URL format: {res_url}")
         return parts[1].split(".")[0]
