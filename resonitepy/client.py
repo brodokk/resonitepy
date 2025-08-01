@@ -716,16 +716,31 @@ class Client:
         match = re.search(pattern, link.assetUri.path)
 
         if not match:
-            raise resonite_exceptions.ResoniteException(f'Not supported link type {link}')
+            pattern2 = r'\/(G-.*)\/(R-.*)'
+            match2 = re.search(pattern2, link.assetUri.path)
+            if not match2:
+                raise resonite_exceptions.ResoniteException(f'Not supported link type {link}')
 
-        user = match.group(1)
-        record = match.group(2)
+            group = match2.group(1)
+            record = match2.group(2)
 
-        response = self.request(
-            'get',
-            f"/users/{user}/records/{record}",
-        )
-        return to_class(ResoniteDirectory, response, DACITE_CONFIG)
+            response = self.request(
+                'get',
+                f"/groups/{group}/records/{record}",
+            )
+
+            return to_class(ResoniteDirectory, response, DACITE_CONFIG)
+
+        else:
+            user = match.group(1)
+            record = match.group(2)
+
+            response = self.request(
+                'get',
+                f"/users/{user}/records/{record}",
+            )
+
+            return to_class(ResoniteDirectory, response, DACITE_CONFIG)
 
 
     def getMessageLegacy(
