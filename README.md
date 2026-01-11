@@ -12,7 +12,7 @@ to be fully implemented.
 
 Quick exemple of to use it
 
-```
+```python
 from resonitepy.client import Client
 from resonitepy.classes import LoginDetails, LoginDetailsAuth
 
