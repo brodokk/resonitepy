@@ -702,31 +702,57 @@ class Client:
 
         Raises:
             resonite_exceptions.ResoniteException: If the link type is not supported.
+            resonite_exceptions.ResoniteAPIException: If the folder is not found in the cloud. Either delete or folder set back to non public. Supposed.
+            resonite_exceptions.InvalidToken: If denied permission to access the folder in the cloud. Supposed.
 
         Examples:
             >>> client = Client()
-            >>> link = ResoniteLink(assetUri='resrec://U-123/R-456')
+            >>> link = ResoniteLink(assetUri=ParseResult(scheme='resrec', path='/G-Resonite/Inventory/Resonite Essentials'))  # This is not a valid ResoniteLink object but the minimal presend inside for this function to work
             >>> directory = client.resolveLink(link)
         """
         if link.assetUri.scheme != 'resrec':
-            raise resonite_exceptions.ResoniteException(f'Not supported link type {link}')
+            raise resonite_exceptions.ResoniteException(f"Not supported scheme '{link.assetUri.scheme}' for link type {link}")
 
-        # TODO: Add support for special resonite folder in format: `/G-Resonite/Inventory/Resonite Essential`
-        pattern = r'\/(U-.*)\/(R-.*)'
-        match = re.search(pattern, link.assetUri.path)
+        owner_id = None
+        record = None
+        record_type = None
+        record_path = None
 
-        if not match:
-            raise resonite_exceptions.ResoniteException(f'Not supported link type {link}')
+        match_user_link_legacy = re.search(r'\/(U-.*)\/(R-.*)', link.assetUri.path)
+        if not record_path and match_user_link_legacy:
+            owner_id = match_user_link_legacy.group(1)
+            record = match_user_link_legacy.group(2)
+            record_type = "users"
+            record_path = f"{link.assetUri.path.replace('/'+owner_id+'/', '').replace('/', '\\')}"
 
-        user = match.group(1)
-        record = match.group(2)
+        match_group_link_legacy = re.search(r'\/(G-.*)\/(R-.*)', link.assetUri.path)
+        if not record_path and match_group_link_legacy:
+            owner_id = match_group_link_legacy.group(1)
+            record = match_group_link_legacy.group(2)
+            record_type = "groups"
+            record_path = f"{link.assetUri.path.replace('/'+owner_id+'/', '').replace('/', '\\')}"
+
+        if link.id and link.assetUri.path:
+            match_user_link = re.search(r'\/(U-.*?)\/', link.assetUri.path)
+            if not record_path and match_user_link:
+                owner_id = match_user_link.group(1)
+                record_type = "users"
+                record_path = f"root/{link.assetUri.path.replace('/'+owner_id+'/', '').replace('/', '\\')}"
+            match_group_link = re.search(r'\/(G-.*?)\/', link.assetUri.path)
+            if not record_path and match_group_link:
+                owner_id = match_group_link.group(1)
+                record_type = "groups"
+                record_path = f"root/{link.assetUri.path.replace('/'+owner_id+'/', '').replace('/', '\\')}"
+            record = link.id
+
+        if not owner_id or not record or not record_type:
+            raise resonite_exceptions.ResoniteException(f'Not supported group type in link type {link}')
 
         response = self.request(
             'get',
-            f"/users/{user}/records/{record}",
+            f"/{record_type}/{owner_id}/records/{record_path}",
         )
         return to_class(ResoniteDirectory, response, DACITE_CONFIG)
-
 
     def getMessageLegacy(
         self,

@@ -15,6 +15,7 @@ import os
 
 from resonitepy.classes import ResoniteDirectory, ResoniteLink, ResoniteMessage, ResoniteMessageContentText
 from resonitepy.client import Client
+from resonitepy.exceptions import ResoniteException, ResoniteAPIException, InvalidToken
 from resonitepy import classes
 
 client = Client()
@@ -39,19 +40,27 @@ sessions = client.getSessions()
 session = client.getSession(sessions[0].sessionId)
 contacts = client.getContacts()
 inventory = client.getInventory()
-tested_directory = False
-tested_link = False
 for record in inventory:
     # TODO: test about ResoniteObject
-    if not tested_directory and isinstance(record, ResoniteDirectory):
-        directory = client.getDirectory(record)
-        tested_directory = True
-    # TODO: Can't test, brodokk doesn't have this kind of record in his inventory
-    if not tested_link and isinstance(record, ResoniteLink) and record.assetUri.path.startswith('U-'):
-        link = client.resolveLink(record)
-        tested_link = True
-    if tested_directory and tested_link:
-        break
+    if isinstance(record, ResoniteDirectory):
+        client.getDirectory(record)
+    if isinstance(record, ResoniteLink):
+        try:
+            client.resolveLink(record)
+        except ResoniteAPIException as e:
+            if '404' in str(e):
+                print("Folder either delete or made non public. Impossible to know for sure.")
+            else:
+                print(record)
+                raise e
+        except InvalidToken as e:
+            print("Supposed denied permission on an existing public folder. Impossible to know for sure.")
+        except ResoniteException as e:
+            if "Not supported scheme 'https' for link type" in str(e):
+                print("https scheme for ResoniteLink is not supported for now.")
+            else:
+                print(record)
+                raise e
 legacy_messages = client.getMessageLegacy()
 owner_path_user = client.getOwnerPath(client.userId)
 owner_path_group = client.getOwnerPath(user_groups[0].id)
