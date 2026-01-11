@@ -1099,3 +1099,9 @@ class Platform:
     userSessionScheme: str
     steamAppId: str
     discordAppId: int
+
+@dataclass
+class ResoniteBadge:
+    tag: str
+    url: str
+    slotName: str

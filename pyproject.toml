@@ -9,6 +9,7 @@ homepage = "https://github.com/brodokk/resonitepy"
 repository = "https://github.com/brodokk/resonitepy"
 include = [
     "LICENSE",
+    "resonitepy/data/badges.csv",
 ]
 
 [tool.poetry.dependencies]

@@ -13,6 +13,7 @@ from hashlib import sha256
 from os import path
 from typing import Dict, List
 from urllib.parse import ParseResult, urlparse
+from importlib.resources import files
 
 import dacite
 import requests
@@ -51,6 +52,7 @@ from .classes import (
     ResoniteUserMembership,
     ResoniteGroup,
     ResoniteGroupMember,
+    ResoniteBadge,
 )
 from .utils import getOwnerType, deprecated_alias
 from .endpoints import API_URL, ASSETS_URL
@@ -1000,3 +1002,32 @@ class Client:
         """
         response = self.request('get', '/platform')
         return to_class(Platform, response, DACITE_CONFIG)
+
+    def badges(self) -> List[ResoniteBadge]:
+        """ Return a list of ResoniteBadge object.
+
+        For now this is a simple list of hadcoded badges from a CSV file.
+
+        The badges with their tag surrounded `[]` are special badges which are not
+        associated to a user directly but they are deduce from other data.
+
+        - `[mobile]`: user's platform is set to Mobile
+        - `[linux]`: user's platform is set to Linux
+        - `[host]`: user is the session host
+        - `[<year>]`: user's account was registred in <year> (<year> would be something like 2020 or 2025 depending)
+        - `[baguette]`: user's account was registred at the same month and date as today but at a different year
+
+        """
+        badges = []
+        path = files("resonitepy").joinpath("data/badges.csv")
+        with path.open(encoding="utf-8", newline="") as f:
+            rows = (line for line in f if not line.lstrip().startswith("#"))
+            for row in rows:
+                row = row.split(",")
+                badge_dict = {
+                    "tag": row[0],
+                    "url": row[1],
+                    "slotName": row[2]
+                }
+                badges.append(to_class(ResoniteBadge, badge_dict, DACITE_CONFIG))
+        return badges
