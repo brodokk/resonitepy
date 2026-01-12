@@ -116,6 +116,8 @@ class ResoniteDirectory(ResoniteRecord):
     """The tags associated with the directory."""
     creationTime: Optional[datetime]
     """The creation time of the directory."""
+    migrationMetadata: Optional[dict]
+    assetManifest: Optional[List]
 
     @property
     def content_path(self) -> str:
@@ -500,7 +502,15 @@ class supporterMetadataPatreon:
 
 @dataclass
 class supporterMetadataStripe:
-    pass
+    totalSupportCents: int
+    firstSupportTimestamp: str
+    lowestTierCents: int
+    lastTierCents: int
+    isActive: bool
+    isActiveSupporter: bool
+    highestTierCents: int
+    lastSupportTimestamp: str
+    totalSupportMonths: int
 
 supporterMetadataTypeMapping = {
     'patreon': supporterMetadataPatreon,
@@ -529,7 +539,7 @@ class ResoniteUser:
     """Whether the user is locked."""
     supressBanEvasion: bool
     """Whether ban evasion is suppressed for the user."""
-    two_fa_login: bool
+    two_fa_login: Optional[bool]
     """Whether two-factor authentication is enabled for login."""
     profile: Optional[ProfileData]
     """The profile data of the user."""
@@ -551,8 +561,9 @@ class ResoniteUser:
     """The entitlements of the user."""
     migratedData: Optional[ResoniteUserMigrationData]
     """The migrated data of the user."""
-    tags: Optional[List[str]] = field(default_factory=list)
     """The tags associated with the user."""
+    isActiveSupporter: bool
+    tags: Optional[List[str]] = field(default_factory=list)
 
 @dataclass
 class ResoniteUserMembership:
@@ -599,6 +610,11 @@ class ResoniteSessionUser:
     """The session ID of the user."""
     outputDevice: Optional[int]
     """The output device of the user."""
+
+@dataclass
+class DataModelAssemblies:
+    name: str
+    compatibilityHash: str
 
 @dataclass
 class ResoniteSession:
@@ -669,10 +685,12 @@ class ResoniteSession:
     """The total number of joined users."""
     hideFromListing: bool
     """Whether the session is hidden from listing."""
-    dataModelAssemblies: list  # TODO: make it an object
+    dataModelAssemblies: List[DataModelAssemblies]
     """Data model assemblies."""
     universeId: Optional[str]
     """The universe id of the session."""
+    awayKickEnabled: bool
+    awayKickMinutes: int
 
 
 @dataclass
@@ -955,9 +973,13 @@ class ResoniteMessageContentSessionInvite:
     lastUpdate: datetime
     accessLevel: str
     broadcastKey: Optional[str]
-    dataModelAssemblies: list  # TODO: make it an object
+    dataModelAssemblies: List[DataModelAssemblies]
     hideFromListing: bool
     systemCompatibilityHash: str
+    awayKickEnabled: bool
+    awayKickMinutes: int
+    HasEnded: bool
+    IsValid: bool
 
 @dataclass
 class ResoniteMessageContentRequestInvite:
@@ -970,7 +992,7 @@ class ResoniteMessageContentRequestInvite:
     forSessionName: Optional[str]
     isContactOfHost: Optional[str]
     response: Optional[str]
-    invite: Optional[str]
+    invite: Optional[dict]
 
 @dataclass
 class ResoniteMessageContentSound:
@@ -987,7 +1009,7 @@ class ResoniteMessageContentSound:
     tags: List[str]
     path: Optional[str]
     isPublic: bool
-    isForPatron: Optional[bool]
+    isForPatrons: Optional[bool]
     isListed: bool
     lastModificationTime: datetime
     creationTime: datetime
@@ -999,9 +1021,15 @@ class ResoniteMessageContentSound:
     neosDBmanifest: Optional[list]
     assetManifest: list  # TODO: make it an object
     isForPatrons: bool
-    version: dict  # TODO: make it an object
+    version: ResoniteRecordVersion
     isDeleted: bool
     isReadOnly: Optional[bool]
+    description: Optional[str]
+    thumbnailUri: Optional[str]
+    rootRecordId: Optional[int]
+    migrationMetadata: Optional[str]
+    IsValidOwnerId: bool
+    IsValidRecordId: bool
 
 
 
@@ -1018,8 +1046,9 @@ class ResoniteMessage:
     senderUserSessionId: Optional[str]
     isMigrated: bool
     readTime: Optional[datetime]
-    otherId: str
+    otherId: Optional[str]
     lastUpdateTime: datetime
+    description: Optional[str]
     content: Optional[
         ResoniteMessageContentText
         | ResoniteMessageContentSessionInvite
@@ -1099,6 +1128,9 @@ class Platform:
     userSessionScheme: str
     steamAppId: str
     discordAppId: int
+    studioNameLong: str
+    studioNameShort: str
+    wiki: str
 
 @dataclass
 class ResoniteBadge:
