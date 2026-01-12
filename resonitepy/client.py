@@ -11,7 +11,7 @@ import logging
 from datetime import datetime
 from hashlib import sha256
 from os import path
-from typing import Dict, List
+from typing import Dict, List, Callable
 from urllib.parse import ParseResult, urlparse
 from importlib.resources import files
 
@@ -77,6 +77,78 @@ except json.decoder.JSONDecodeError:
     logger.error("Debug must be True or False")
     exit(1)
 
+_CLASS_PREPROCESSORS = {}
+
+def register_preprocessor(data_class: type, preprocessor: Callable[[dict], dict]):
+    """Register a preprocessor for a specific class"""
+    _CLASS_PREPROCESSORS[data_class] = preprocessor
+
+def preprocess_resonite_message(data: dict) -> dict:
+    """Context-aware preprocessor for ResoniteMessage"""
+    data = data.copy()
+
+    if isinstance(data.get('content'), str):
+        message_type = data.get('messageType')
+        if message_type == 'Text':
+            data['content'] = ResoniteMessageContentText(content=data['content'])
+        elif message_type == 'SessionInvite':
+            content_data = json.loads(data['content']) if isinstance(data['content'], str) else data['content']
+            data['content'] = to_class(ResoniteMessageContentSessionInvite, content_data, DACITE_CONFIG)
+        elif message_type == 'InviteRequest':
+            content_data = json.loads(data['content']) if isinstance(data['content'], str) else data['content']
+            data['content'] = to_class(ResoniteMessageContentRequestInvite, content_data, DACITE_CONFIG)
+        elif message_type == 'Object':
+            content_data = json.loads(data['content']) if isinstance(data['content'], str) else data['content']
+            data['content'] = to_class(ResoniteMessageContentObject, content_data, DACITE_CONFIG)
+        elif message_type == 'Sound':
+            content_data = json.loads(data['content']) if isinstance(data['content'], str) else data['content']
+            data['content'] = to_class(ResoniteMessageContentSound, content_data, DACITE_CONFIG)
+
+    return data
+
+def preprocess_resonite_user(data: dict) -> dict:
+    """Context-aware preprocessor for ResoniteUser"""
+    data = data.copy()
+
+    # Handle 2FA field rename
+    if '2fa_login' in data:
+        data['two_fa_login'] = data['2fa_login']
+        del data['2fa_login']
+
+    # Handle entitlements
+    if 'entitlements' in data:
+        entitlements = []
+        for entitlement in data['entitlements']:
+            if '$type' in entitlement:
+                entitlement_type = entitlement['$type']
+                del entitlement['$type']
+                entitlements.append(
+                    to_class(
+                        resoniteUserEntitlementTypeMapping[entitlement_type],
+                        entitlement,
+                        DACITE_CONFIG
+                    )
+                )
+        data['entitlements'] = entitlements
+
+    # Handle supporter metadata
+    if 'supporterMetadata' in data:
+        supporter_metadata = []
+        for supporterMetadata in data['supporterMetadata']:
+            if '$type' in supporterMetadata:
+                supporterMetadata_type = supporterMetadata['$type']
+                del supporterMetadata['$type']
+                supporter_metadata.append(
+                    to_class(
+                        supporterMetadataTypeMapping[supporterMetadata_type],
+                        supporterMetadata,
+                        DACITE_CONFIG
+                    )
+                )
+        data['supporterMetadata'] = supporter_metadata
+
+    return data
+
 DACITE_CONFIG = dacite.Config(
     cast=[
         ResoniteMessageType,
@@ -113,6 +185,10 @@ def to_class(data_class: type , data: dict, config: dacite.Config) -> object:
         >>> record_version = to_class(ResoniteRecordVersion, data, config)
     """
     try:
+        # Apply registered preprocessor if available
+        if data_class in _CLASS_PREPROCESSORS:
+            data = _CLASS_PREPROCESSORS[data_class](data)
+
         return dacite.from_dict(data_class, data, config)
     except Exception as exc:
         logger.error(f'Error converting to class {data_class.__name__}')
@@ -120,6 +196,9 @@ def to_class(data_class: type , data: dict, config: dacite.Config) -> object:
             logger.debug("With data:")
             logger.debug(data)
         logger.error(exc)
+
+register_preprocessor(ResoniteMessage, preprocess_resonite_message)
+register_preprocessor(ResoniteUser, preprocess_resonite_user)
 
 @dataclasses.dataclass
 class Client:
@@ -486,7 +565,7 @@ class Client:
         return Client.process_record_ist(data=data)
 
     def to_resonite_user(self, data: dict) -> dict:
-
+        """DEPRECATED: Preprocessing now handled by DACITE type_hooks"""
         if 'entitlements' in data:
             entitlements = []
             for entitlement in data['entitlements']:
@@ -542,8 +621,7 @@ class Client:
             user = self.userId
 
         response = self.request('get', f"/users/{user}")
-        processed_data = self.to_resonite_user(response)
-        return to_class(ResoniteUser, processed_data, DACITE_CONFIG)
+        return to_class(ResoniteUser, response, DACITE_CONFIG)
 
     def getMemberships(self) -> List[ResoniteUserMembership]:
         """ Retrieve current connected user group memberships.
@@ -806,31 +884,7 @@ class Client:
 
         messages = []
         for message in response:
-            if message['messageType'] == 'SessionInvite':
-                message['content'] = json.loads(message['content'])
-                ResoniteMessageContentType = ResoniteMessageContentSessionInvite
-            elif message['messageType'] == 'InviteRequest':
-                message['content'] = json.loads(message['content'])
-                ResoniteMessageContentType = ResoniteMessageContentRequestInvite
-            elif message['messageType'] == 'Object':
-                message['content'] = json.loads(message['content'])
-                ResoniteMessageContentType = ResoniteMessageContentObject
-            elif message['messageType'] == 'Sound':
-                message['content'] = json.loads(message['content'])
-                ResoniteMessageContentType = ResoniteMessageContentSound
-            elif  message['messageType'] == 'Text':
-                ResoniteMessageContentType = ResoniteMessageContentText
-                message['content'] = {'content': message['content']}
-            else:
-                raise ValueError(f'Non supported type {message["messageType"]}')
-
-            message['content'] = to_class(
-                ResoniteMessageContentType, message['content'], DACITE_CONFIG
-            )
-
-            messages.append(
-                to_class(ResoniteMessage, message, DACITE_CONFIG)
-            )
+            messages.append(to_class(ResoniteMessage, message, DACITE_CONFIG))
 
         return messages
 
@@ -978,7 +1032,7 @@ class Client:
         )
         users = []
         for user in response:
-            users.append(to_class(ResoniteUser, self.to_resonite_user(user), DACITE_CONFIG))
+            users.append(to_class(ResoniteUser, user, DACITE_CONFIG))
         return users
 
     def getUser(self, userId: str) -> ResoniteUser:
@@ -991,11 +1045,11 @@ class Client:
             ResoniteUser: The user
         """
         response = self.request('get', f'/users/{userId}')
-        return to_class(ResoniteUser, self.to_resonite_user(response), DACITE_CONFIG)
+        return to_class(ResoniteUser, response, DACITE_CONFIG)
 
     def getUserByName(self, userId) -> ResoniteUser:
         reponse = self.request('get', f'/users/{userId}?byUsername=True')
-        return to_class(ResoniteUser, self.to_resonite_user(reponse), DACITE_CONFIG)
+        return to_class(ResoniteUser, reponse, DACITE_CONFIG)
 
     def platform(self) -> Platform:
         """ Return information about the platform.
