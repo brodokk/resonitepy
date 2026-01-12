@@ -13,14 +13,14 @@ TODO:
 
 import os
 
+os.environ['DEBUG'] = 'true'
+
 from resonitepy.classes import ResoniteDirectory, ResoniteLink, ResoniteMessage, ResoniteMessageContentText
 from resonitepy.client import Client
 from resonitepy.exceptions import ResoniteException, ResoniteAPIException, InvalidToken
 from resonitepy import classes
 
 client = Client()
-
-os.environ['DEBUG'] = 'true'
 
 import tomllib
 
@@ -36,31 +36,32 @@ client.login(
 
 user = client.getUserData()
 user_groups = client.getMemberships()
+badges = client.badges()
 sessions = client.getSessions()
 session = client.getSession(sessions[0].sessionId)
 contacts = client.getContacts()
 inventory = client.getInventory()
-for record in inventory:
-    # TODO: test about ResoniteObject
-    if isinstance(record, ResoniteDirectory):
-        client.getDirectory(record)
-    if isinstance(record, ResoniteLink):
-        try:
-            client.resolveLink(record)
-        except ResoniteAPIException as e:
-            if '404' in str(e):
-                print("Folder either delete or made non public. Impossible to know for sure.")
-            else:
-                print(record)
-                raise e
-        except InvalidToken as e:
-            print("Supposed denied permission on an existing public folder. Impossible to know for sure.")
-        except ResoniteException as e:
-            if "Not supported scheme 'https' for link type" in str(e):
-                print("https scheme for ResoniteLink is not supported for now.")
-            else:
-                print(record)
-                raise e
+# for record in inventory:
+#     # TODO: test about ResoniteObject
+#     if isinstance(record, ResoniteDirectory):
+#         client.getDirectory(record)
+#     if isinstance(record, ResoniteLink):
+#         try:
+#             client.resolveLink(record)
+#         except ResoniteAPIException as e:
+#             if '404' in str(e):
+#                 print("Folder either delete or made non public. Impossible to know for sure.")
+#             else:
+#                 print(record)
+#                 raise e
+#         except InvalidToken as e:
+#             print("Supposed denied permission on an existing public folder. Impossible to know for sure.")
+#         except ResoniteException as e:
+#             if "Not supported scheme 'https' for link type" in str(e):
+#                 print("https scheme for ResoniteLink is not supported for now.")
+#             else:
+#                 print(record)
+#                 raise e
 legacy_messages = client.getMessageLegacy()
 owner_path_user = client.getOwnerPath(client.userId)
 owner_path_group = client.getOwnerPath(user_groups[0].id)
@@ -80,5 +81,4 @@ search_result = client.searchUser('brodokk')
 user = client.getUser(contacts[0].id)
 user = client.getUserByName(contacts[0].contactUsername)
 
-# TODO: VERY IMPORTANT I NEED TO CONTINUE THIS AND PATCH MORE STUFF IF NEEDED BEFORE DOING A RELEASE!
 platform = client.platform()
