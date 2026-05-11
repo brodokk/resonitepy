@@ -803,26 +803,42 @@ class Client:
             owner_id = match_user_link_legacy.group(1)
             record = match_user_link_legacy.group(2)
             record_type = "users"
-            record_path = f"{link.assetUri.path.replace('/'+owner_id+'/', '').replace('/', '\\')}"
+            record_path = (
+                link.assetUri.path
+                .replace('/'+owner_id+'/', '')
+                .replace('/', '\\')
+            )
 
         match_group_link_legacy = re.search(r'\/(G-.*)\/(R-.*)', link.assetUri.path)
         if not record_path and match_group_link_legacy:
             owner_id = match_group_link_legacy.group(1)
             record = match_group_link_legacy.group(2)
             record_type = "groups"
-            record_path = f"{link.assetUri.path.replace('/'+owner_id+'/', '').replace('/', '\\')}"
+            record_path = (
+                link.assetUri.path
+                .replace('/'+owner_id+'/', '')
+                .replace('/', '\\')
+            )
 
         if link.id and link.assetUri.path:
             match_user_link = re.search(r'\/(U-.*?)\/', link.assetUri.path)
             if not record_path and match_user_link:
                 owner_id = match_user_link.group(1)
                 record_type = "users"
-                record_path = f"root/{link.assetUri.path.replace('/'+owner_id+'/', '').replace('/', '\\')}"
+                record_path = (
+                    link.assetUri.path
+                    .replace('/'+owner_id+'/', '')
+                    .replace('/', '\\')
+                )
             match_group_link = re.search(r'\/(G-.*?)\/', link.assetUri.path)
             if not record_path and match_group_link:
                 owner_id = match_group_link.group(1)
                 record_type = "groups"
-                record_path = f"root/{link.assetUri.path.replace('/'+owner_id+'/', '').replace('/', '\\')}"
+                record_path = (
+                    link.assetUri.path
+                    .replace('/'+owner_id+'/', '')
+                    .replace('/', '\\')
+                )
             record = link.id
 
         if not owner_id or not record or not record_type:
