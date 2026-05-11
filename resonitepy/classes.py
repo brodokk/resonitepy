@@ -332,6 +332,8 @@ class ResoniteUserQuotaBytesSources:
     """The base quota bytes."""
     patreon: Optional[int]
     """The Patreon quota bytes."""
+    paid: Optional[int]
+    """The paid quota bytes."""
 
 
 @dataclass
@@ -512,9 +514,23 @@ class supporterMetadataStripe:
     lastSupportTimestamp: str
     totalSupportMonths: int
 
+
+@dataclass
+class supporterMetadataPromo:
+    isActiveSupporter: bool
+    isActive: bool
+    totalSupportMonths: int
+    totalSupportCents: int
+    lastTierCents: int
+    highestTierCents: int
+    lowestTierCents: int
+    firstSupportTimestamp: datetime
+    lastSupportTimestamp: datetime
+
 supporterMetadataTypeMapping = {
     'patreon': supporterMetadataPatreon,
     'stripe': supporterMetadataStripe,
+    'promo': supporterMetadataPromo,
 }
 
 
@@ -529,6 +545,8 @@ class ResoniteUser:
     """The username of the user."""
     normalizedUsername: str
     """The normalized username of the user."""
+    alternateNormalizedNames: Optional[list[str]]
+    """The alternate normalized username of the user."""
     email: Optional[str]
     """The email of the user."""
     registrationDate: datetime
@@ -545,7 +563,8 @@ class ResoniteUser:
     """The profile data of the user."""
     supporterMetadata: Optional[List[
         supporterMetadataPatreon |
-        supporterMetadataStripe
+        supporterMetadataStripe |
+        supporterMetadataPromo
     ]]
     """The Patreon supporter metadata of the user."""
     entitlements: Optional[List[
@@ -563,6 +582,7 @@ class ResoniteUser:
     """The migrated data of the user."""
     """The tags associated with the user."""
     isActiveSupporter: bool
+    promoCode: Optional[str]
     tags: Optional[List[str]] = field(default_factory=list)
 
 @dataclass

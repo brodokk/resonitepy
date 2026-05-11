@@ -193,9 +193,9 @@ def to_class(data_class: type , data: dict, config: dacite.Config) -> object:
     except Exception as exc:
         logger.error(f'Error converting to class {data_class.__name__}')
         if DEBUG:
-            logger.debug("With data:")
-            logger.debug(data)
-        logger.error(exc)
+            logger.error("With data:")
+            logger.error(data)
+        logger.exception(exc)
 
 register_preprocessor(ResoniteMessage, preprocess_resonite_message)
 register_preprocessor(ResoniteUser, preprocess_resonite_user)
