@@ -145,3 +145,6 @@ auth.token
 
 # vscode
 .vscode/
+
+# Projects
+test_logs

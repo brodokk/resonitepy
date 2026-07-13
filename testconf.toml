@@ -1,2 +1,4 @@
 owner_id="YOUR RESONITE USER ID STARTING WITH U-"
 password="YOUR PASSWORD"
+group_id="YOUR RESONITE GROUP ID STARTING WITH G-" # Note for this one you can look into the response "etMemberships response" since it's not mandatory 
+search_query="A USER SEARCH QUESTION" # Like you was searching someone in your contact list
