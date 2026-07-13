@@ -241,6 +241,8 @@ class ProfileData:
     """The tagline of the profile."""
     description: Optional[str]
     """The description of the profile."""
+    pronouns: Optional[str]
+    """The pronouns of the profile."""
 
 
 @dataclass
@@ -971,8 +973,8 @@ class ResoniteMessageContentSessionInvite:
     normalizedSessionId: str
     hostMachineId: str
     hostUsername: str
-    hostUserId: str
-    hostUserSessionId: str
+    hostUserId: Optional[str]
+    hostUserSessionId: Optional[str]
     compatibilityHash: Optional[str]
     universeId: Optional[str]
     appVersion: Optional[str]
