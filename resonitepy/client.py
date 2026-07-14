@@ -6,13 +6,11 @@ import re
 import json
 import os
 import dataclasses
-import json
 import logging
 from datetime import datetime
 from hashlib import sha256
 from os import path
-from typing import Dict, List, Callable, TypeVar
-from urllib.parse import ParseResult, urlparse
+from typing import Dict, List, TypeVar
 from importlib.resources import files
 
 import requests
@@ -28,22 +26,10 @@ from .classes import (
     ResoniteLink,
     ResoniteRecord,
     ResoniteUser,
-    ResoniteUserEntitlementShoutOut,
-    ResoniteUserEntitlementCredits,
     ResoniteMessage,
-    ResoniteMessageType,
-    ResoniteMessageContentSessionInvite,
-    ResoniteMessageContentRequestInvite,
-    ResoniteMessageContentObject,
-    ResoniteMessageContentSound,
-    ResoniteMessageContentText,
     ResoniteCloudVar,
-    RecordType,
     recordTypeMapping,
-    OnlineStatus,
     ResoniteSession,
-    CurrentResoniteSessionAccessLevel,
-    ContactStatus,
     OwnerType,
     ResoniteCloudVarDefs,
     Platform,

@@ -1,14 +1,16 @@
 """
-Tool to quickly test if the endpoints input and output are still matching with the code.
+Tool to test that the Resonite API and this module still match, by calling the
+endpoints with the account configured in testconf.toml and reporting any drift:
 
-For not this script have just in mind to detect if some class have field that are missing or of invalid type.
+- a field sent by the API that no class declares
+- a field declared in a class but never sent by the API during the run
+- unknown enum values, $type or messageType (parsed as the UNKNOWN fallbacks)
+
+Genuinely incompatible responses (missing required field, wrong type) raise
+ResoniteParseError instead. Exits with code 1 if any drift is found.
 
 Usage:
-    OWNERID=<Resonite U- user id> PASSWORD=<your password> python test.py
-
-TODO:
-    - Add support for field in model but not send anymore, and raise an error too
-
+    python test.py
 """
 
 import dataclasses
@@ -19,8 +21,8 @@ from enum import Enum
 
 os.environ["RESONITEPY_DRIFT"] = "1"
 
-from resonitepy.classes import ResoniteDirectory, ResoniteLink, ResoniteObject, ResoniteWorld, ResoniteTexture, ResoniteAudio, ResoniteMessage, ResoniteMessageContentText
-from resonitepy.client import Client, to_class
+from resonitepy.classes import ResoniteDirectory, ResoniteLink, ResoniteObject, ResoniteWorld, ResoniteTexture, ResoniteAudio
+from resonitepy.client import Client
 from resonitepy.exceptions import ResoniteException, ResoniteAPIException, InvalidToken
 from resonitepy import classes
 

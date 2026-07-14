@@ -149,6 +149,17 @@ class ResoniteLink(ResoniteRecord):
 
 
 @resonite_class
+class ResoniteAssetManifestEntry:
+    """ Data class representing an asset referenced by a record.
+    """
+
+    hash: str
+    """The hash of the asset in the Resonite asset database."""
+    bytes: int
+    """The size of the asset in bytes."""
+
+
+@resonite_class
 class ResoniteDirectory(ResoniteRecord):
     """ Data class representing a Resonite directory.
     """
@@ -162,7 +173,7 @@ class ResoniteDirectory(ResoniteRecord):
     creationTime: Optional[datetime] = None
     """The creation time of the directory."""
     migrationMetadata: Optional[dict] = None
-    assetManifest: Optional[List] = None
+    assetManifest: Optional[List[ResoniteAssetManifestEntry]] = None
 
     @property
     def content_path(self) -> str:
@@ -682,6 +693,37 @@ class ResoniteGroupMember:
     isMigrated: bool
     ownerId: str
 
+class CurrentResoniteSessionAccessLevel(UnknownEnumMixin, Enum):
+    """ Enum representing the access level of a Resonite session.
+    """
+    PRIVATE = "Private"
+    """Private access level."""
+    LAN = "LAN"
+    """LAN access level."""
+    FRIENDS = "Contacts"
+    """Contacts access level."""
+    FRIENDSOFFRIENDS = "ContactsPlus"
+    """Contacts+ access level."""
+    REGISTEREDUSERS = "RegisteredUsers"
+    """Registered Users access level."""
+    ANYONE = "Anyone"
+    """Anyone access level."""
+    UNKNOWN = "__unknown__"
+
+    def __str__(self):
+        """Returns the string representation of the access level."""
+        text = {
+            'PRIVATE': 'Private',
+            'LAN': 'LAN',
+            'FRIENDS': 'Contacts',
+            'FRIENDSOFFRIENDS': 'Contacts+',
+            'REGISTEREDUSERS': 'Registered Users',
+            'ANYONE': 'Anyone',
+            'UNKNOWN': 'Unknown'
+        }
+        return text[self.name]
+
+
 @resonite_class
 class ResoniteSessionUser:
     """ Data class representing a Resonite session user.
@@ -720,7 +762,7 @@ class ResoniteSession:
     """The corresponding world ID."""
     description: Optional[str] = None
     """The description of the session."""
-    accessLevel: str  # TODO: This should be an Enum instead
+    accessLevel: CurrentResoniteSessionAccessLevel
     """The access level of the session."""
     hasEnded: bool
     """Whether the session has ended."""
@@ -754,10 +796,10 @@ class ResoniteSession:
     """The timestamp of the session begin time."""
     sessionId: str
     """The session ID."""
-    nestedSessionIds: list  # TODO: This should be a list of objects
-    """The nested session IDs."""
-    parentSessionIds: list  # TODO: This should be a list of objects
-    """The parent session IDs."""
+    nestedSessionIds: List[str]
+    """The IDs of the sessions nested under this session."""
+    parentSessionIds: List[str]
+    """The IDs of the parent sessions of this session."""
     sessionURLs: List[str]
     """The URLs of the session."""
     sessionUsers: List[ResoniteSessionUser]
@@ -800,55 +842,6 @@ class OnlineStatus(UnknownEnumMixin, Enum):
     BUSY = "Busy"
     OFFLINE = "Offline"
     UNKNOWN = "__unknown__"
-
-
-onlineStatusMapping = {
-    OnlineStatus.ONLINE: "Online",
-    OnlineStatus.AWAY: "Away",
-    OnlineStatus.BUSY: "Busy",
-    OnlineStatus.OFFLINE: "Offline",
-}
-
-
-class CurrentResoniteSessionAccessLevel(UnknownEnumMixin, Enum):
-    """ Enum representing the access level of a Resonite session.
-    """
-    PRIVATE = 0
-    """Private access level."""
-    LAN = 1
-    """LAN access level."""
-    FRIENDS = 2
-    """Contacts access level."""
-    FRIENDSOFFRIENDS = 3
-    """Contacts+ access level."""
-    REGISTEREDUSERS = 4
-    """Registered Users access level."""
-    ANYONE = 5
-    """Anyone access level."""
-    UNKNOWN = -1
-
-    def __str__(self):
-        """Returns the string representation of the access level."""
-        text = {
-            'PRIVATE': 'Private',
-            'LAN': 'LAN',
-            'FRIENDS': 'Contacts',
-            'FRIENDSOFFRIENDS': 'Contacts+',
-            'REGISTEREDUSERS': 'Registered Users',
-            'ANYONE': 'Anyone',
-            'UNKNOWN': 'Unknown'
-        }
-        return text[self.name]
-
-
-currentResoniteSessionAccessLevelMapping = {
-    CurrentResoniteSessionAccessLevel.PRIVATE: 0,
-    CurrentResoniteSessionAccessLevel.LAN: 1,
-    CurrentResoniteSessionAccessLevel.FRIENDS: 2,
-    CurrentResoniteSessionAccessLevel.FRIENDSOFFRIENDS: 3,
-    CurrentResoniteSessionAccessLevel.REGISTEREDUSERS: 4,
-    CurrentResoniteSessionAccessLevel.ANYONE: 5,
-}
 
 
 @resonite_class
@@ -924,14 +917,6 @@ class ContactStatus(UnknownEnumMixin, Enum):
     UNKNOWN = "__unknown__"
 
 
-contactStatusMapping = {
-    ContactStatus.ACCEPTED: "Accepted",
-    ContactStatus.IGNORED: "Ignored",
-    ContactStatus.REQUESTED: "Requested",
-    ContactStatus.NONE: "None",
-}
-
-
 @resonite_class
 class ResoniteContact:
     id: str
@@ -965,15 +950,6 @@ class ResoniteMessageType(UnknownEnumMixin, Enum):
     """Sugar cubes type message."""
     UNKNOWN = "__unknown__"
 
-ResoniteMessageTypeMapping = {
-    ResoniteMessageType.TEXT: "Text",
-    ResoniteMessageType.OBJECT: "Object",
-    ResoniteMessageType.SOUND: "Sound",
-    ResoniteMessageType.SESSIONINVITE: "SessionInvite",
-    ResoniteMessageType.INVITEREQUEST: "InviteRequest",
-    ResoniteMessageType.CREDITTRANSFER: "CreditTransfer",
-    ResoniteMessageType.SUGARCUBES: "SugarCubes",
-}
 
 @resonite_class
 class ResoniteMessageContentUnknown:
@@ -1068,7 +1044,7 @@ class ResoniteMessageContentSessionInvite:
     mobileFriendly: bool
     sessionBeginTime: datetime
     lastUpdate: datetime
-    accessLevel: str
+    accessLevel: CurrentResoniteSessionAccessLevel
     broadcastKey: Optional[str] = None
     dataModelAssemblies: List[DataModelAssemblies]
     hideFromListing: bool
@@ -1116,7 +1092,7 @@ class ResoniteMessageContentSound:
     randomOrder: int
     submissions: Optional[str] = None
     neosDBmanifest: Optional[list] = None
-    assetManifest: list  # TODO: make it an object
+    assetManifest: List[ResoniteAssetManifestEntry]
     isForPatrons: bool
     version: ResoniteRecordVersion
     isDeleted: bool
