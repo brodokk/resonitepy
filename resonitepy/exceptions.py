@@ -36,3 +36,12 @@ class FolderNotFound(ResoniteException):
 
 class InvalidToken(ResoniteException):
     pass
+
+class ResoniteParseError(ResoniteException):
+    """ Raised when an API response doesn't match the expected class. """
+
+    def __init__(self, data_class: type, data, error):
+        self.data_class = data_class
+        self.data = data
+        self.error = error
+        super().__init__(f"Failed to parse {data_class.__name__}: {error}")

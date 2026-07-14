@@ -3,19 +3,60 @@ This module define some of the Resonite API json
 responce under usable python classes.
 """
 
-from dataclasses import dataclass, field
+import json
+import logging
+import os
+from dataclasses import field
 from datetime import datetime
 from enum import Enum
 from pathlib import PureWindowsPath
-from typing import List, Optional
+
+from typing import Annotated, List, Literal, Optional
+from urllib.parse import ParseResult, urlparse
+from pydantic import BeforeValidator, ConfigDict, model_validator, Field
+from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from resonitepy.secrets import generate
 from resonitepy.exceptions import ResoniteException
 
-from urllib.parse import ParseResult
+_RESONITE_CLASS_CONFIG = ConfigDict(
+    extra='allow',
+    arbitrary_types_allowed=True,
+    validate_by_name=True,
+    validate_by_alias=True,
+)
+
+_TRACK_API_FIELDS = os.environ.get("RESONITEPY_DRIFT") == "1"
 
 
-class RecordType(Enum):
+def _record_api_fields(cls, data, handler):
+    """ Records which fields the API actually sent, for drift detection in test.py
+    """
+    keys = set(data.keys()) if isinstance(data, dict) else None
+    obj = handler(data)
+    if keys is not None:
+        object.__setattr__(obj, "__api_fields__", keys)
+    return obj
+
+
+def resonite_class(cls):
+    if _TRACK_API_FIELDS:
+        cls.__record_api_fields__ = model_validator(mode="wrap")(classmethod(_record_api_fields))
+    return pydantic_dataclass(config=_RESONITE_CLASS_CONFIG, kw_only=True)(cls)
+
+logger = logging.getLogger(__name__)
+
+class UnknownEnumMixin:
+
+    @classmethod
+    def _missing_(cls, value):
+        logger.warning(
+            "Unknown %s value %r, falling back to %s.UNKNOWN",
+            cls.__name__, value, cls.__name__,
+        )
+        return cls.UNKNOWN
+
+class RecordType(UnknownEnumMixin, Enum):
     """ Enum representing the type of a Resonite record.
     """
 
@@ -31,9 +72,10 @@ class RecordType(Enum):
     """Represents a texture record."""
     AUDIO = "audio"
     """Represents an audio record."""
+    UNKNOWN = "__unknown__"
 
 
-@dataclass
+@resonite_class
 class ResoniteRecordVersion:
     """ Data class representing the version of a Resonite record.
     """
@@ -42,19 +84,19 @@ class ResoniteRecordVersion:
     """The global version of the record."""
     localVersion: int
     """The local version of the record."""
-    lastModifyingUserId: Optional[str]
+    lastModifyingUserId: Optional[str] = None
     """The ID of the user who last modified the record. (optional)"""
-    lastModifyingMachineId: Optional[str]
+    lastModifyingMachineId: Optional[str] = None
     """The ID of the machine that last modified the record. (optional"""
 
-@dataclass
+@resonite_class
 class ResoniteRecord:
     """ Data class representing a Resonite record.
     """
 
     id: str
     """The ID of the record."""
-    assetUri: Optional[str]
+    assetUri: Optional[str] = None
     """The URI of the asset associated with the record."""
     version: ResoniteRecordVersion
     """The version of the record."""
@@ -64,9 +106,9 @@ class ResoniteRecord:
     """The type of the record."""
     ownerName: str
     """The name of the owner of the record."""
-    path: Optional[str]
+    path: Optional[str] = None
     """The path of the record."""
-    thumbnailUri: Optional[str]
+    thumbnailUri: Optional[str] = None
     """The URI of the thumbnail associated with the record."""
     isPublic: bool
     """Whether the record is public."""
@@ -76,9 +118,9 @@ class ResoniteRecord:
     """Whether the record is listed."""
     isDeleted: bool
     """Whether the record is deleted."""
-    tags: Optional[list]
+    tags: Optional[list] = None
     """The tags associated with the record."""
-    creationTime: Optional[datetime]
+    creationTime: Optional[datetime] = None
     """The creation time of the record."""
     lastModificationTime: datetime
     """The last modification time of the record."""
@@ -94,30 +136,33 @@ class ResoniteRecord:
     """Whether the record is read only."""
 
 
-@dataclass
+@resonite_class
 class ResoniteLink(ResoniteRecord):
     """ Data class representing a Resonite link.
     """
 
-    assetUri: ParseResult
+    assetUri: Annotated[
+        ParseResult,
+        BeforeValidator(lambda v: urlparse(v) if isinstance(v, str) else v),
+    ]
     """The parsed URI of the asset associated with the link."""
 
 
-@dataclass
+@resonite_class
 class ResoniteDirectory(ResoniteRecord):
     """ Data class representing a Resonite directory.
     """
 
-    lastModifyingMachineId: Optional[str]
+    lastModifyingMachineId: Optional[str] = None
     """The ID of the machine that last modified the directory."""
     ownerName: str
     """The name of the owner of the directory."""
     tags: List[str]
     """The tags associated with the directory."""
-    creationTime: Optional[datetime]
+    creationTime: Optional[datetime] = None
     """The creation time of the directory."""
-    migrationMetadata: Optional[dict]
-    assetManifest: Optional[List]
+    migrationMetadata: Optional[dict] = None
+    assetManifest: Optional[List] = None
 
     @property
     def content_path(self) -> str:
@@ -125,14 +170,14 @@ class ResoniteDirectory(ResoniteRecord):
         return str(PureWindowsPath(self.path, self.name))
 
 
-@dataclass
+@resonite_class
 class ResoniteObject(ResoniteRecord):
     """ Data class representing a Resonite object.
     """
 
     assetUri: str
     """The URI of the asset associated with the object."""
-    lastModifyingMachineId: Optional[str]
+    lastModifyingMachineId: Optional[str] = None
     """ The ID of the machine that last modified the object."""
     ownerName: str
     """The name of the owner of the object."""
@@ -141,19 +186,19 @@ class ResoniteObject(ResoniteRecord):
     creationTime: datetime
     """The creation time of the object."""
 
-@dataclass
+@resonite_class
 class ResoniteWorld(ResoniteRecord):
     """ Data class representing a Resonite world.
     """
     pass
 
-@dataclass
+@resonite_class
 class ResoniteTexture(ResoniteRecord):
     """ Data class representing a Resonite texture.
     """
     pass
 
-@dataclass
+@resonite_class
 class ResoniteAudio(ResoniteRecord):
     """ Data class representing a Resonite audio.
     """
@@ -170,7 +215,7 @@ recordTypeMapping = {
 }
 
 
-@dataclass
+@resonite_class
 class LoginDetailsAuth:
     """ Data class representing a login details for authentication.
     """
@@ -195,7 +240,7 @@ class LoginDetailsAuth:
         }
 
 
-@dataclass
+@resonite_class
 class LoginDetails:
     """ Data class representing a login details.
 
@@ -226,26 +271,26 @@ class LoginDetails:
             raise ResoniteException('A password is needed')
 
 
-@dataclass
+@resonite_class
 class ProfileData:
     """ Data class representing a profile data.
     """
 
-    iconUrl: Optional[str]
+    iconUrl: Optional[str] = None
     """The URL of the profile icon."""
-    tokenOutOut: Optional[List[str]]
+    tokenOutOut: Optional[List[str]] = None
     """The list of token outputs."""
-    displayBadges: Optional[list]
+    displayBadges: Optional[list] = None
     """The list of display badges."""
-    tagline: Optional[str]
+    tagline: Optional[str] = None
     """The tagline of the profile."""
-    description: Optional[str]
+    description: Optional[str] = None
     """The description of the profile."""
-    pronouns: Optional[str]
+    pronouns: Optional[str] = None
     """The pronouns of the profile."""
 
 
-@dataclass
+@resonite_class
 class Snapshot:
     """ Data class representing a snapshot of data.
     """
@@ -263,14 +308,14 @@ class Snapshot:
     timestamp: str
     """The timestamp of the snapshot."""
 
-@dataclass
+@resonite_class
 class PatreonData:
     """ Data class representing a Patreon data.
     """
 
     isPatreonSupporter: bool
     """Whether the user is a Patreon supporter."""
-    patreonId: Optional[str]
+    patreonId: Optional[str] = None
     """The Patreon ID of the user."""
     lastPatreonEmail: str
     """The last Patreon email associated with the user."""
@@ -288,29 +333,29 @@ class PatreonData:
     """The last external amount in cents."""
     hasSupported: bool
     """Whether the user has supported."""
-    lastIsAnorak: Optional[bool] # Deprecated
+    lastIsAnorak: Optional[bool] = None # Deprecated
     """Deprecated"""
     priorityIssue: int
     """The priority issue."""
-    lastPlusActivationTime: Optional[datetime] # Depreacted
+    lastPlusActivationTime: Optional[datetime] = None # Depreacted
     """Deprecated"""
-    lastActivationTime: Optional[datetime] # Deprecated
+    lastActivationTime: Optional[datetime] = None # Deprecated
     """Deprecated"""
-    lastPlusPledgeAmount: Optional[int] # Deprecated
+    lastPlusPledgeAmount: Optional[int] = None # Deprecated
     """Deprecated"""
     lastPaidPledgeAmount: int
     """The last paid pledge amount."""
-    accountName: Optional[str] # Deprecated
+    accountName: Optional[str] = None # Deprecated
     """Deprecated"""
-    currentAccountType: Optional[int] # Deprecated
+    currentAccountType: Optional[int] = None # Deprecated
     """Deprecated"""
-    currentAccountCents: Optional[int] # Deprecated
+    currentAccountCents: Optional[int] = None # Deprecated
     """Deprecated"""
-    pledgedAccountType: Optional[int] # Deprecated
+    pledgedAccountType: Optional[int] = None # Deprecated
     """Deprecated"""
 
 
-@dataclass
+@resonite_class
 class QuotaBytesSources:
     """ Data class representing the quota bytes sources.
     """
@@ -325,27 +370,27 @@ class QuotaBytesSources:
     """The MMC21 honorary quota bytes."""
 
 
-@dataclass
+@resonite_class
 class ResoniteUserQuotaBytesSources:
     """ Data class representing the quota bytes sources for a Resonite user.
     """
 
     base: int
     """The base quota bytes."""
-    patreon: Optional[int]
+    patreon: Optional[int] = None
     """The Patreon quota bytes."""
-    paid: Optional[int]
+    paid: Optional[int] = None
     """The paid quota bytes."""
 
 
-@dataclass
+@resonite_class
 class ResoniteUserMigrationData:
     """ Data class representing the migration data for a Resonite user.
     """
 
     username: str
     """The username of the user."""
-    email: Optional[str]
+    email: Optional[str] = None
     """The email of the user."""
     userId: str
     """The ID of the user."""
@@ -353,30 +398,39 @@ class ResoniteUserMigrationData:
     """The quota bytes of the user."""
     usedBytes: int
     """The used bytes of the user."""
-    patreonData: Optional[PatreonData]
+    patreonData: Optional[PatreonData] = None
     """ The Patreon data of the user."""
-    quotaBytesSources: Optional[ResoniteUserQuotaBytesSources]
+    quotaBytesSources: Optional[ResoniteUserQuotaBytesSources] = None
     """The quota bytes sources of the user."""
     registrationDate: datetime
     """The registration date of the user."""
 
+@resonite_class
+class ResoniteUserEntitlementUnknown:
+    """ Fallback for entitlement types this module doesn't know yet.
+    """
+    type_: str = Field(alias='$type', default='__unknown__')
 
-@dataclass
+@resonite_class
 class ResoniteUserEntitlementShoutOut:
     """ Data class representing an entitlement shout-out for a Resonite user.
     """
 
+    type_: Literal['shoutOut'] = Field(alias='$type', default='shoutOut')
+    """The $type tag sent by the API for this entitlement."""
     shoutoutType: str
     """The type of the shout-out."""
     friendlyDescription: str
     """The friendly description of the shout-out."""
 
 
-@dataclass
+@resonite_class
 class ResoniteUserEntitlementCredits:
     """ Data class representingan entitlement credit for a Resonite user.
     """
 
+    type_: Literal['credits'] = Field(alias='$type', default='credits')
+    """The $type tag sent by the API for this entitlement."""
     creditType: str
     """The type of the credit."""
     friendlyDescription: str
@@ -385,31 +439,37 @@ class ResoniteUserEntitlementCredits:
     """The entitlement origins."""
 
 
-@dataclass
+@resonite_class
 class ResoniteUserEntitlementGroupCreation:
     """ Data class representing the entitlement for the group creation for a Resonite user.
     """
 
+    type_: Literal['groupCreation'] = Field(alias='$type', default='groupCreation')
+    """The $type tag sent by the API for this entitlement."""
     groupCount: int
     """The number of groups the user is entitled to create."""
     entitlementOrigins: list[str]
     """The entitlement origins."""
 
 
-@dataclass
+@resonite_class
 class ResoniteEntitlementDeleteRecovery:
     """ Data class representing the entitlement for deleting recovery data in Resonite.
     """
 
+    type_: Literal['deleteRecovery'] = Field(alias='$type', default='deleteRecovery')
+    """The $type tag sent by the API for this entitlement."""
     entitlementOrigins: list[str]
     """The entitlement origins."""
 
 
-@dataclass
+@resonite_class
 class ResoniteUserEntitlementBadge:
     """ Data class representing an entitlement badge for a Resonite user.
     """
 
+    type_: Literal['badge'] = Field(alias='$type', default='badge')
+    """The $type tag sent by the API for this entitlement."""
     badgeType: str
     """The type of the badge."""
     badgeCount: int
@@ -418,22 +478,26 @@ class ResoniteUserEntitlementBadge:
     """The entitlement origins."""
 
 
-@dataclass
+@resonite_class
 class ResoniteUserEntitlementHeadless:
     """ Data class representing a headless entitlement for a Resonite user.
     """
 
+    type_: Literal['headless'] = Field(alias='$type', default='headless')
+    """The $type tag sent by the API for this entitlement."""
     friendlyDescription: str
     """The friendly description of the headless entitlement."""
     entitlementOrigins: list[str]
     """The entitlement origins."""
 
 
-@dataclass
+@resonite_class
 class ResoniteUserEntitlementExitMessage:
     """ Data class representing an exit message entitlement for a Resonite user.
     """
 
+    type_: Literal['exitMessage'] = Field(alias='$type', default='exitMessage')
+    """The $type tag sent by the API for this entitlement."""
     isLifetime: bool
     """Indicates whether the entitlement is lifetime."""
     messageCount: int
@@ -444,11 +508,13 @@ class ResoniteUserEntitlementExitMessage:
     """The entitlement origins."""
 
 
-@dataclass
+@resonite_class
 class ResoniteUserEntitlementStorageSpace:
     """ Data class representing a storage space entitlement for a Resonite user.
     """
 
+    type_: Literal['storageSpace'] = Field(alias='$type', default='storageSpace')
+    """The $type tag sent by the API for this entitlement."""
     bytes: int
     """The amount of storage space in bytes."""
     maximumShareLevel: str
@@ -468,23 +534,18 @@ class ResoniteUserEntitlementStorageSpace:
     entitlementOrigins: list[str]
     """The entitlement origins."""
 
-resoniteUserEntitlementTypeMapping = {
-    'shoutOut': ResoniteUserEntitlementShoutOut,
-    'credits': ResoniteUserEntitlementCredits,
-    'groupCreation': ResoniteUserEntitlementGroupCreation,
-    'deleteRecovery': ResoniteEntitlementDeleteRecovery,
-    'badge': ResoniteUserEntitlementBadge,
-    'headless': ResoniteUserEntitlementHeadless,
-    'exitMessage': ResoniteUserEntitlementExitMessage,
-    'storageSpace': ResoniteUserEntitlementStorageSpace,
-}
+@resonite_class
+class supporterMetadataUnknown:
+    """ Fallback for supporter metadata types this module doesn't know yet.
+    """
 
-
-@dataclass
+@resonite_class
 class supporterMetadataPatreon:
     """ Data class representing the Patreon supporter metadata.
     """
 
+    type_: Literal['patreon'] = Field(alias='$type', default='patreon')
+    """The $type tag sent by the API for this supporter metadata."""
     isActiveSupporter: bool
     """Whether the user is an active supporter."""
     isActive: bool
@@ -504,8 +565,9 @@ class supporterMetadataPatreon:
     lastSupportTimestamp: datetime
     """The timestamp of the last support."""
 
-@dataclass
+@resonite_class
 class supporterMetadataStripe:
+    type_: Literal['stripe'] = Field(alias='$type', default='stripe')
     totalSupportCents: int
     firstSupportTimestamp: str
     lowestTierCents: int
@@ -517,8 +579,9 @@ class supporterMetadataStripe:
     totalSupportMonths: int
 
 
-@dataclass
+@resonite_class
 class supporterMetadataPromo:
+    type_: Literal['promo'] = Field(alias='$type', default='promo')
     isActiveSupporter: bool
     isActive: bool
     totalSupportMonths: int
@@ -529,14 +592,8 @@ class supporterMetadataPromo:
     firstSupportTimestamp: datetime
     lastSupportTimestamp: datetime
 
-supporterMetadataTypeMapping = {
-    'patreon': supporterMetadataPatreon,
-    'stripe': supporterMetadataStripe,
-    'promo': supporterMetadataPromo,
-}
 
-
-@dataclass
+@resonite_class
 class ResoniteUser:
     """ Data class representing a Resonite user.
     """
@@ -547,9 +604,9 @@ class ResoniteUser:
     """The username of the user."""
     normalizedUsername: str
     """The normalized username of the user."""
-    alternateNormalizedNames: Optional[list[str]]
+    alternateNormalizedNames: Optional[list[str]] = None
     """The alternate normalized username of the user."""
-    email: Optional[str]
+    email: Optional[str] = None
     """The email of the user."""
     registrationDate: datetime
     """The registration date of the user."""
@@ -559,42 +616,50 @@ class ResoniteUser:
     """Whether the user is locked."""
     supressBanEvasion: bool
     """Whether ban evasion is suppressed for the user."""
-    two_fa_login: Optional[bool]
+    two_fa_login: Optional[bool] = Field(alias='2fa_login', default=None)
     """Whether two-factor authentication is enabled for login."""
-    profile: Optional[ProfileData]
+    profile: Optional[ProfileData] = None
     """The profile data of the user."""
     supporterMetadata: Optional[List[
-        supporterMetadataPatreon |
-        supporterMetadataStripe |
-        supporterMetadataPromo
-    ]]
+        Annotated[
+            supporterMetadataPatreon
+            | supporterMetadataStripe
+            | supporterMetadataPromo,
+            Field(discriminator='type_'),
+        ]
+        | supporterMetadataUnknown
+    ]] = None
     """The Patreon supporter metadata of the user."""
     entitlements: Optional[List[
-        ResoniteUserEntitlementShoutOut |
-        ResoniteUserEntitlementCredits |
-        ResoniteUserEntitlementGroupCreation |
-        ResoniteEntitlementDeleteRecovery |
-        ResoniteUserEntitlementBadge |
-        ResoniteUserEntitlementHeadless |
-        ResoniteUserEntitlementExitMessage |
-        ResoniteUserEntitlementStorageSpace
-    ]]
+        Annotated[
+            ResoniteUserEntitlementShoutOut
+            | ResoniteUserEntitlementCredits
+            | ResoniteUserEntitlementGroupCreation
+            | ResoniteEntitlementDeleteRecovery
+            | ResoniteUserEntitlementBadge
+            | ResoniteUserEntitlementHeadless
+            | ResoniteUserEntitlementExitMessage
+            | ResoniteUserEntitlementStorageSpace,
+            Field(discriminator='type_'),
+        ]
+        | ResoniteUserEntitlementUnknown
+    ]] = None
     """The entitlements of the user."""
-    migratedData: Optional[ResoniteUserMigrationData]
+    migratedData: Optional[ResoniteUserMigrationData] = None
     """The migrated data of the user."""
     """The tags associated with the user."""
     isActiveSupporter: bool
-    promoCode: Optional[str]
+    promoCode: Optional[str] = None
     tags: Optional[List[str]] = field(default_factory=list)
 
-@dataclass
+@resonite_class
 class ResoniteUserMembership:
     id: str
     groupName: str
     isMigrated: bool
     ownerId: str
 
-@dataclass
+@resonite_class
 class WorldId:
     """ Data class representing a World ID.
     """
@@ -604,56 +669,56 @@ class WorldId:
     recordId: str
     """The record ID of the world."""
 
-@dataclass
+@resonite_class
 class ResoniteGroup:
     id: str
     adminUserId: str
     name: str
     isMigrated: bool
 
-@dataclass
+@resonite_class
 class ResoniteGroupMember:
     id: str
     isMigrated: bool
     ownerId: str
 
-@dataclass
+@resonite_class
 class ResoniteSessionUser:
     """ Data class representing a Resonite session user.
     """
 
     isPresent: bool
     """Whether the user is present."""
-    userID: Optional[str]
+    userID: Optional[str] = None
     """The ID of the user."""
     username: str
     """The username of the user."""
-    userSessionId: Optional[str]
+    userSessionId: Optional[str] = None
     """The session ID of the user."""
-    outputDevice: Optional[int]
+    outputDevice: Optional[int] = None
     """The output device of the user."""
 
-@dataclass
+@resonite_class
 class DataModelAssemblies:
     name: str
     compatibilityHash: str
 
-@dataclass
+@resonite_class
 class ResoniteSession:
     """ Data class representing a Resonite session.
     """
 
-    activeSessions: Optional[str]
+    activeSessions: Optional[str] = None
     """The active sessions."""
     activeUsers: int
     """ The number of active users."""
-    compatibilityHash: Optional[str]
+    compatibilityHash: Optional[str] = None
     """The compatibility hash."""
-    systemCompatibilityHash: Optional[str]
+    systemCompatibilityHash: Optional[str] = None
     """The system compatibility hash."""
-    correspondingWorldId: Optional[WorldId]
+    correspondingWorldId: Optional[WorldId] = None
     """The corresponding world ID."""
-    description: Optional[str]
+    description: Optional[str] = None
     """The description of the session."""
     accessLevel: str  # TODO: This should be an Enum instead
     """The access level of the session."""
@@ -663,9 +728,9 @@ class ResoniteSession:
     """Whether the host is headless."""
     hostMachineId: str
     """The machine ID of the host."""
-    hostUserSessionId: Optional[str]
+    hostUserSessionId: Optional[str] = None
     """The user session ID of the host."""
-    hostUserId: Optional[str]
+    hostUserId: Optional[str] = None
     """The user ID of the host."""
     hostUsername: str
     """The username of the host."""
@@ -699,7 +764,7 @@ class ResoniteSession:
     """The users in the session."""
     tags: List[str]
     """The tags associated with the session."""
-    thumbnailUrl: Optional[str]
+    thumbnailUrl: Optional[str] = None
     """The URL of the thumbnail."""
     totalActiveUsers: int
     """The total number of active users."""
@@ -709,13 +774,13 @@ class ResoniteSession:
     """Whether the session is hidden from listing."""
     dataModelAssemblies: List[DataModelAssemblies]
     """Data model assemblies."""
-    universeId: Optional[str]
+    universeId: Optional[str] = None
     """The universe id of the session."""
     awayKickEnabled: bool
     awayKickMinutes: int
 
 
-@dataclass
+@resonite_class
 class PublicRSAKey:
     """ Data class representing a public RSA key.
     """
@@ -726,7 +791,7 @@ class PublicRSAKey:
     """The modulus of the RSA key."""
 
 
-class OnlineStatus(Enum):
+class OnlineStatus(UnknownEnumMixin, Enum):
     """ Enum representing the online status of a Resonite user.
     """
 
@@ -734,6 +799,7 @@ class OnlineStatus(Enum):
     AWAY = "Away"
     BUSY = "Busy"
     OFFLINE = "Offline"
+    UNKNOWN = "__unknown__"
 
 
 onlineStatusMapping = {
@@ -744,7 +810,7 @@ onlineStatusMapping = {
 }
 
 
-class CurrentResoniteSessionAccessLevel(Enum):
+class CurrentResoniteSessionAccessLevel(UnknownEnumMixin, Enum):
     """ Enum representing the access level of a Resonite session.
     """
     PRIVATE = 0
@@ -759,6 +825,7 @@ class CurrentResoniteSessionAccessLevel(Enum):
     """Registered Users access level."""
     ANYONE = 5
     """Anyone access level."""
+    UNKNOWN = -1
 
     def __str__(self):
         """Returns the string representation of the access level."""
@@ -768,7 +835,8 @@ class CurrentResoniteSessionAccessLevel(Enum):
             'FRIENDS': 'Contacts',
             'FRIENDSOFFRIENDS': 'Contacts+',
             'REGISTEREDUSERS': 'Registered Users',
-            'ANYONE': 'Anyone'
+            'ANYONE': 'Anyone',
+            'UNKNOWN': 'Unknown'
         }
         return text[self.name]
 
@@ -783,16 +851,16 @@ currentResoniteSessionAccessLevelMapping = {
 }
 
 
-@dataclass
+@resonite_class
 class UserStatusData:
     """ Data class representing an user status data.
     """
 
-    activeSessions: Optional[List[ResoniteSession]]
+    activeSessions: Optional[List[ResoniteSession]] = None
     """The list of active sessions."""
-    currentSession: Optional[ResoniteSession]
+    currentSession: Optional[ResoniteSession] = None
     """The current session."""
-    compatibilityHash: Optional[str]
+    compatibilityHash: Optional[str] = None
     """The compatibility hash."""
     currentHosting: bool
     """Whether the user is currently hosting a session."""
@@ -800,22 +868,22 @@ class UserStatusData:
     """The access level of the current session."""
     currentSessionHidden: bool
     """Whether the current session is hidden."""
-    currentSessionId: Optional[str]
+    currentSessionId: Optional[str] = None
     """The ID of the current session."""
     isMobile: bool
     """Whether the user is on a mobile device."""
     lastStatusChange: datetime
     """The timestamp of the last status change."""
-    neosVersion: Optional[str]
+    neosVersion: Optional[str] = None
     """The version of Neos."""
     onlineStatus: OnlineStatus
     """The online status of the user."""
-    OutputDevice: Optional[str]
+    OutputDevice: Optional[str] = None
     """The output device of the user."""
-    publicRSAKey: Optional[PublicRSAKey]
+    publicRSAKey: Optional[PublicRSAKey] = None
     """The public RSA key of the user."""
 
-@dataclass
+@resonite_class
 class ResoniteUserStatus:
     """ Data class representing the status of a Resonite user.
     """
@@ -830,18 +898,18 @@ class ResoniteUserStatus:
     """Whether the current session is hidden."""
     currentHosting: bool
     """Whether the user is currently hosting a session."""
-    compatibilityHash: Optional[str]
+    compatibilityHash: Optional[str] = None
     """The compatibility hash."""
-    neosVersion: Optional[str]
+    neosVersion: Optional[str] = None
     """The version of Neos. """
-    publicRSAKey: Optional[PublicRSAKey]
+    publicRSAKey: Optional[PublicRSAKey] = None
     """The public RSA key."""
-    OutputDevice: Optional[str]
+    OutputDevice: Optional[str] = None
     """The output device."""
     isMobile: bool
     """Whether the user is on a mobile device."""
 
-class ContactStatus(Enum):
+class ContactStatus(UnknownEnumMixin, Enum):
     """ Enum representing the status of a contact.
     """
 
@@ -853,6 +921,7 @@ class ContactStatus(Enum):
     """ The contact request has been sent but not yet accepted."""
     NONE = "None"
     """No contact status."""
+    UNKNOWN = "__unknown__"
 
 
 contactStatusMapping = {
@@ -863,20 +932,20 @@ contactStatusMapping = {
 }
 
 
-@dataclass
+@resonite_class
 class ResoniteContact:
     id: str
     contactUsername: str
     contactStatus: ContactStatus
     isAccepted: bool
-    profile: Optional[ProfileData]
+    profile: Optional[ProfileData] = None
     latestMessageTime: datetime
     isMigrated: bool
     isCounterpartMigrated: bool
     ownerId: str
-    universeId: Optional[str]
+    universeId: Optional[str] = None
 
-class ResoniteMessageType(Enum):
+class ResoniteMessageType(UnknownEnumMixin, Enum):
     """ Enum representing a Resonite message type.
     """
 
@@ -894,6 +963,7 @@ class ResoniteMessageType(Enum):
     """Credit transfert type message."""
     SUGARCUBES = "SugarCubes"
     """Sugar cubes type message."""
+    UNKNOWN = "__unknown__"
 
 ResoniteMessageTypeMapping = {
     ResoniteMessageType.TEXT: "Text",
@@ -905,15 +975,20 @@ ResoniteMessageTypeMapping = {
     ResoniteMessageType.SUGARCUBES: "SugarCubes",
 }
 
+@resonite_class
+class ResoniteMessageContentUnknown:
+    """ Fallback content for message types this module doesn't know yet.
+    """
+    raw: str
 
-@dataclass
+@resonite_class
 class ResoniteMessageContentText:
     content: str
 
     def __str__(self) -> str:
         return self.content
 
-@dataclass
+@resonite_class
 class ResoniteMessageContentObject:
     """ Data class representing the content of a Resonite object message.
     """
@@ -924,17 +999,17 @@ class ResoniteMessageContentObject:
     """The ID of the object owner."""
     assetUri: str
     """The URI of the object asset."""
-    version: Optional[ResoniteRecordVersion]
+    version: Optional[ResoniteRecordVersion] = None
     """The version of the object record."""
     name: str
     """The name of the object."""
     recordType: RecordType
     """The type of the object record."""
-    ownerName: Optional[str]
+    ownerName: Optional[str] = None
     """The name of the object owner."""
     tags: List[str]
     """The tags associated with the object."""
-    path: Optional[str]
+    path: Optional[str] = None
     """The path of the object."""
     thumbnailUri: str
     """The URI of the object thumbnail."""
@@ -950,9 +1025,9 @@ class ResoniteMessageContentObject:
     """The timestamp of the last modification."""
     creationTime: datetime
     """The timestamp of the creation."""
-    firstPublishTime: Optional[datetime]
+    firstPublishTime: Optional[datetime] = None
     """The timestamp of the first publish."""
-    isDeleted: Optional[bool]
+    isDeleted: Optional[bool] = None
     """Whether the object is deleted."""
     visits: int
     """The number of visits."""
@@ -960,31 +1035,31 @@ class ResoniteMessageContentObject:
     """The rating of the object."""
     randomOrder: int
     """The random order of the object."""
-    submissions: Optional[str]
+    submissions: Optional[str] = None
     """The submissions of the object."""
 
-@dataclass
+@resonite_class
 class ResoniteMessageContentSessionInvite:
     name: str
-    description: Optional[str]
-    correspondingWorldId: Optional[WorldId]
+    description: Optional[str] = None
+    correspondingWorldId: Optional[WorldId] = None
     tags: List[str]
     sessionId: str
     normalizedSessionId: str
     hostMachineId: str
     hostUsername: str
-    hostUserId: Optional[str]
-    hostUserSessionId: Optional[str]
-    compatibilityHash: Optional[str]
-    universeId: Optional[str]
-    appVersion: Optional[str]
-    headlessHost: Optional[bool]
+    hostUserId: Optional[str] = None
+    hostUserSessionId: Optional[str] = None
+    compatibilityHash: Optional[str] = None
+    universeId: Optional[str] = None
+    appVersion: Optional[str] = None
+    headlessHost: Optional[bool] = None
     sessionURLs: List[str]
-    thumbnailUrl: Optional[str]
-    parentSessionIds: Optional[List[str]]
-    nestedSessionIds: Optional[List[str]]
+    thumbnailUrl: Optional[str] = None
+    parentSessionIds: Optional[List[str]] = None
+    nestedSessionIds: Optional[List[str]] = None
     sessionUsers: List[ResoniteSessionUser]
-    thumbnail: Optional[str]
+    thumbnail: Optional[str] = None
     joinedUsers: int
     activeUsers: int
     totalActiveUsers: int
@@ -994,7 +1069,7 @@ class ResoniteMessageContentSessionInvite:
     sessionBeginTime: datetime
     lastUpdate: datetime
     accessLevel: str
-    broadcastKey: Optional[str]
+    broadcastKey: Optional[str] = None
     dataModelAssemblies: List[DataModelAssemblies]
     hideFromListing: bool
     systemCompatibilityHash: str
@@ -1003,59 +1078,59 @@ class ResoniteMessageContentSessionInvite:
     HasEnded: bool
     IsValid: bool
 
-@dataclass
+@resonite_class
 class ResoniteMessageContentRequestInvite:
     inviteRequestId: str
     userIdToInvite: str
     usernameToInvite: str
     requestingFromUserId: str
     requestingFromUsername: str
-    forSessionId: Optional[str]
-    forSessionName: Optional[str]
-    isContactOfHost: Optional[str]
-    response: Optional[str]
-    invite: Optional[dict]
+    forSessionId: Optional[str] = None
+    forSessionName: Optional[str] = None
+    isContactOfHost: Optional[str] = None
+    response: Optional[str] = None
+    invite: Optional[dict] = None
 
-@dataclass
+@resonite_class
 class ResoniteMessageContentSound:
     id: str
-    ownerId: Optional[str]
+    ownerId: Optional[str] = None
     assetUri: str
-    globalVersion: Optional[int]
-    localVersion: Optional[int]
-    lastModifyingUserId: Optional[str]
-    lastModifyingMachineId: Optional[str]
+    globalVersion: Optional[int] = None
+    localVersion: Optional[int] = None
+    lastModifyingUserId: Optional[str] = None
+    lastModifyingMachineId: Optional[str] = None
     name: str
     recordType: RecordType
-    ownerName: Optional[str]
+    ownerName: Optional[str] = None
     tags: List[str]
-    path: Optional[str]
+    path: Optional[str] = None
     isPublic: bool
-    isForPatrons: Optional[bool]
+    isForPatrons: Optional[bool] = None
     isListed: bool
     lastModificationTime: datetime
     creationTime: datetime
-    firstPublishTime: Optional[datetime]
+    firstPublishTime: Optional[datetime] = None
     visits: int
     rating: float
     randomOrder: int
-    submissions: Optional[str]
-    neosDBmanifest: Optional[list]
+    submissions: Optional[str] = None
+    neosDBmanifest: Optional[list] = None
     assetManifest: list  # TODO: make it an object
     isForPatrons: bool
     version: ResoniteRecordVersion
     isDeleted: bool
-    isReadOnly: Optional[bool]
-    description: Optional[str]
-    thumbnailUri: Optional[str]
-    rootRecordId: Optional[int]
-    migrationMetadata: Optional[str]
+    isReadOnly: Optional[bool] = None
+    description: Optional[str] = None
+    thumbnailUri: Optional[str] = None
+    rootRecordId: Optional[int] = None
+    migrationMetadata: Optional[str] = None
     IsValidOwnerId: bool
     IsValidRecordId: bool
 
 
 
-@dataclass
+@resonite_class
 class ResoniteMessage:
     """Representation of a Resonite message."""
     id: str
@@ -1065,47 +1140,63 @@ class ResoniteMessage:
     sendTime: str
     recipientId: str
     messageType: ResoniteMessageType
-    senderUserSessionId: Optional[str]
+    senderUserSessionId: Optional[str] = None
     isMigrated: bool
-    readTime: Optional[datetime]
-    otherId: Optional[str]
+    readTime: Optional[datetime] = None
+    otherId: Optional[str] = None
     lastUpdateTime: datetime
-    description: Optional[str]
+    description: Optional[str] = None
     content: Optional[
         ResoniteMessageContentText
         | ResoniteMessageContentSessionInvite
         | ResoniteMessageContentRequestInvite
         | ResoniteMessageContentObject
         | ResoniteMessageContentSound
-    ]
+        | ResoniteMessageContentUnknown
+    ] = None
 
-@dataclass
+    @model_validator(mode='before')
+    @classmethod
+    def _parse_content(cls, data):
+        if isinstance(data, dict) and isinstance(data.get('content'), str):
+            raw = data['content']
+            mtype = data.get('messageType')
+            if mtype == 'Text':
+                data = {**data, 'content': {'content': raw}}
+            elif mtype in ('SessionInvite', 'InviteRequest', 'Object', 'Sound'):
+                data = {**data, 'content': json.loads(raw)}
+            else:
+                data = {**data, 'content': {'raw': raw}}
+        return data
+
+@resonite_class
 class ResoniteCloudVar:
     """Representation of Resonite clound variable."""
     ownerId: str
     """The ownerId of a ResoniteCloudVar should start with `U-`"""
     path: str
     """The path of a ResoniteCloudVar should start with a `U-` for a user owned path and a `G-` for a group owned path."""
-    value: Optional[str]
+    value: Optional[str] = None
     partitionKey: str
     rowKey: str
-    timestamp: Optional[str]
-    eTag: Optional[str]
+    timestamp: Optional[str] = None
+    eTag: Optional[str] = None
 
 
-class OwnerType(Enum):
-    MACHING = "Machine"
+class OwnerType(UnknownEnumMixin, Enum):
+    MACHINE = "Machine"
     USER = "User"
     GROUP = "Group"
     INVALID = "Invalid"
+    UNKNOWN = "__unknown__"
 
 
-@dataclass
+@resonite_class
 class ResoniteCloudVarDefs:
     definitionOwnerId: str
     subpath: str
     variableType: str
-    defaultValue: Optional[str]
+    defaultValue: Optional[str] = None
     deleteScheduled: bool
     readPermissions: List[str]
     writePermissions: List[str]
@@ -1116,7 +1207,7 @@ class ResoniteCloudVarDefs:
     eTag: str
 
 
-@dataclass
+@resonite_class
 class Platform:
     name: str
     shortNamePrefix: str
@@ -1154,7 +1245,7 @@ class Platform:
     studioNameShort: str
     wiki: str
 
-@dataclass
+@resonite_class
 class ResoniteBadge:
     tag: str
     url: str

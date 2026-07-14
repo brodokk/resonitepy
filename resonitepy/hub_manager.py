@@ -5,7 +5,7 @@ import json
 import asyncio
 from enum import Enum
 
-from resonitepy.client import DACITE_CONFIG, to_class
+from resonitepy.client import to_class
 from resonitepy.classes import ResoniteSession, ResoniteSession, ResoniteMessage
 from resonitepy.endpoints import HUB_URL
 
@@ -126,7 +126,7 @@ class HubManager:
         for i, raw_arg in enumerate(raw_args):
             if i < len(arg_types) and arg_types[i] is not None:
                 try:
-                    deserialized_obj = to_class(arg_types[i], raw_arg, DACITE_CONFIG)
+                    deserialized_obj = to_class(arg_types[i], raw_arg)
                     deserialized.append(deserialized_obj)
                 except Exception as e:
                     logging.warning(f"Failed to deserialize arg {i} to {arg_types[i]}: {e}")

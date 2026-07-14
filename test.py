@@ -11,19 +11,61 @@ TODO:
 
 """
 
+import dataclasses
 import os
 import sys
 from datetime import datetime
+from enum import Enum
 
-os.environ['DEBUG'] = 'true'
+os.environ["RESONITEPY_DRIFT"] = "1"
 
 from resonitepy.classes import ResoniteDirectory, ResoniteLink, ResoniteObject, ResoniteWorld, ResoniteTexture, ResoniteAudio, ResoniteMessage, ResoniteMessageContentText
-from resonitepy.client import Client
+from resonitepy.client import Client, to_class
 from resonitepy.exceptions import ResoniteException, ResoniteAPIException, InvalidToken
 from resonitepy import classes
 
 LOG_PATH = f"test_logs/test_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
 
+DRIFT = []
+DRIFT_OPTIONAL = []
+CLASS_SENT = {}
+
+
+def collect_drift(obj, path=""):
+    """ Returns every place where obj holds API data this module doesn't know about.
+    """
+    found = []
+    if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
+        cls = type(obj)
+        if cls.__name__.endswith("Unknown"):
+            found.append(f"{path or '<root>'}: API sent an unknown type, parsed as {cls.__name__}: {vars(obj)}")
+        sent = getattr(obj, "__api_fields__", None)
+        if sent is not None:
+            CLASS_SENT.setdefault(cls, set()).update(sent)
+        declared = {f.name for f in dataclasses.fields(obj)}
+        for key, value in vars(obj).items():
+            if key not in declared and not key.startswith("_"):
+                found.append(f"{path}.{key}: API sends this field but {cls.__name__} doesn't declare it (value: {value!r})")
+        for f in dataclasses.fields(obj):
+            found.extend(collect_drift(getattr(obj, f.name), f"{path}.{f.name}"))
+    elif isinstance(obj, Enum):
+        if obj.name == "UNKNOWN":
+            found.append(f"{path}: API sent an unknown value, parsed as {type(obj).__name__}.UNKNOWN")
+    elif isinstance(obj, (list, tuple)):
+        for i, item in enumerate(obj):
+            found.extend(collect_drift(item, f"{path}[{i}]"))
+    elif isinstance(obj, dict):
+        for key, value in obj.items():
+            found.extend(collect_drift(value, f"{path}[{key!r}]"))
+    return found
+
+
+def check(result, label):
+    findings = collect_drift(result, label)
+    for finding in findings:
+        print(f"[DRIFT] {finding}")
+    DRIFT.extend(findings)
+    return result
 
 class MultiWriter:
 
@@ -60,29 +102,29 @@ client.login(
     )
 )
 
-user = client.getUserData()
+user = check(client.getUserData(), "getUserData")
 print(f"getUserData response: {user}")
 for entitlement in (user.entitlements or []):
     print(f"entitlement ({type(entitlement).__name__}): {entitlement}")
 for supporter_metadata in (user.supporterMetadata or []):
     print(f"supporterMetadata ({type(supporter_metadata).__name__}): {supporter_metadata}")
 
-user_groups = client.getMemberships()
+user_groups = check(client.getMemberships(), "getMemberships")
 print(f"getMemberships response: {user_groups}")
 
-badges = client.badges()
+badges = check(client.badges(), "badges")
 print(f"badges response: {badges}")
 
-sessions = client.getSessions()
+sessions = check(client.getSessions(), "getSessions")
 print(f"getSessions response: {sessions}")
 
 if sessions:
-    session = client.getSession(sessions[0].sessionId)
+    session = check(client.getSession(sessions[0].sessionId), "getSession")
     print(f"getSession response: {session}")
 else:
     print("No sessions to call getSession on, skipping.")
 
-contacts = client.getContacts()
+contacts = check(client.getContacts(), "getContacts")
 print(f"Got {len(contacts)} contacts")
 for contact in contacts:
     print(
@@ -102,11 +144,11 @@ if icon_url:
 else:
     print("No contact profile iconUrl available, skipping res_db_signature/res_db_to_http.")
 
-inventory = client.getInventory()
+inventory = check(client.getInventory(), "getInventory")
 print(f"getInventory response: {inventory}")
 for record in inventory:
     if isinstance(record, ResoniteDirectory):
-        client.getDirectory(record)
+        check(client.getDirectory(record), "getDirectory")
     if isinstance(record, ResoniteObject):
         print(f"ResoniteObject: {record.name} ({record.id}) -> {record.assetUri}")
     if isinstance(record, ResoniteWorld):
@@ -117,7 +159,7 @@ for record in inventory:
         print(f"ResoniteAudio: {record.name} ({record.id}) -> {record.assetUri}")
     if isinstance(record, ResoniteLink):
         try:
-            client.resolveLink(record)
+            check(client.resolveLink(record), "resolveLink")
         except ResoniteAPIException as e:
             if '404' in str(e):
                 print("Folder either delete or made non public. Impossible to know for sure.")
@@ -133,35 +175,35 @@ for record in inventory:
                 print(record)
                 raise e
 
-legacy_messages = client.getMessageLegacy()
+legacy_messages = check(client.getMessageLegacy(), "getMessageLegacy")
 print(f"getMessageLegacy response: {legacy_messages}")
 for message in legacy_messages:
     print(f"message type={message.messageType}, content ({type(message.content).__name__}): {message.content}")
 
-owner_path_user = client.getOwnerPath(client.userId)
+owner_path_user = check(client.getOwnerPath(client.userId), "getOwnerPath")
 print(f"getOwnerPath response: {owner_path_user}")
 
-search_result = client.searchUser(config.get('search_query'))
+search_result = check(client.searchUser(config.get('search_query')), "searchUser")
 print(f"searchUser response: {search_result}")
 
-user = client.getUser(contacts[0].id)
+user = check(client.getUser(contacts[0].id), "getUser")
 print(f"getUser response: {user}")
 
-user = client.getUserByName(contacts[0].contactUsername)
+user = check(client.getUserByName(contacts[0].contactUsername), "getUserByName")
 print(f"getUserByName response: {user}")
 
-platform = client.platform()
+platform = check(client.platform(), "platform")
 print(f"platform response: {platform}")
 
 if config.get('group_id'):
-    owner_path_group = client.getOwnerPath(config.get('group_id'))
+    owner_path_group = check(client.getOwnerPath(config.get('group_id')), "getOwnerPath(group)")
     print(f"getOwnerPath response: {owner_path_group}")
-    group = client.getGroup(config.get('group_id'))
+    group = check(client.getGroup(config.get('group_id')), "getGroup")
     print(f"getGroup response: {group}")
-    group_members = client.getGroupMembers(config.get('group_id'))
+    group_members = check(client.getGroupMembers(config.get('group_id')), "getGroupMembers")
     print(f"getGroupMembers response: {group_members}")
     if group_members:
-        group_member = client.getGroupMember(config.get('group_id'), group_members[0].id)
+        group_member = check(client.getGroupMember(config.get('group_id'), group_members[0].id), "getGroupMember")
         print(f"getGroupMember response: {group_member}")
     else:
         print("No group members to call getGroupMember on, skipping.")
@@ -176,15 +218,33 @@ else:
 #   /setUserVarType resonitepy_test bool
 #   /setUserVarDefaultValue resonitepy_test false
 #   /setUserVarPerms resonitepy_test read,write variable_owner_unsafe
-cloud_vars = client.listCloudVar(client.userId)
+cloud_vars = check(client.listCloudVar(client.userId), "listCloudVar")
 print(f"listCloudVar response: {cloud_vars}")
-cloud_var_def = client.getCloudVarDefs(client.userId, f"{client.userId}.resonitepy_test")
+cloud_var_def = check(client.getCloudVarDefs(client.userId, f"{client.userId}.resonitepy_test"), "getCloudVarDefs")
 print(f"getCloudVarDefs response: {cloud_var_def}")
-cloud_var = client.getCloudVar(client.userId, f"{client.userId}.resonitepy_test")
+cloud_var = check(client.getCloudVar(client.userId, f"{client.userId}.resonitepy_test"), "getCloudVar")
 print(f"getCloudVar response: {cloud_var}")
 client.setCloudVar(client.userId, f"{client.userId}.resonitepy_test", 'true')
-cloud_var = client.getCloudVar(client.userId, f"{client.userId}.resonitepy_test")
+cloud_var = check(client.getCloudVar(client.userId, f"{client.userId}.resonitepy_test"), "getCloudVar")
 print(f"getCloudVar response after setting true: {cloud_var}")
 client.setCloudVar(client.userId, f"{client.userId}.resonitepy_test", 'false')
-cloud_var = client.getCloudVar(client.userId, f"{client.userId}.resonitepy_test")
+cloud_var = check(client.getCloudVar(client.userId, f"{client.userId}.resonitepy_test"), "getCloudVar")
 print(f"getCloudVar response after setting false: {cloud_var}")
+
+for cls, sent in CLASS_SENT.items():
+    for field_name, info in cls.__pydantic_fields__.items():
+        api_name = info.alias or field_name
+        if api_name not in sent:
+            DRIFT_OPTIONAL.append(f"{cls.__name__}.{field_name}: declared in model but the API never sent it")
+
+print()
+if DRIFT_OPTIONAL:
+    print(f"=== {len(DRIFT_OPTIONAL)} optional drift finding(s) ===")
+    for finding in DRIFT_OPTIONAL:
+        print(f"  {finding}")
+if DRIFT:
+    print(f"=== {len(DRIFT)} drift finding(s) ===")
+    for finding in DRIFT:
+        print(f"  {finding}")
+if not DRIFT and not DRIFT_OPTIONAL:
+    print("=== no API drift detected ===")

@@ -11,14 +11,14 @@ import logging
 from datetime import datetime
 from hashlib import sha256
 from os import path
-from typing import Dict, List, Callable
+from typing import Dict, List, Callable, TypeVar
 from urllib.parse import ParseResult, urlparse
 from importlib.resources import files
 
-import dacite
 import requests
 from requests.exceptions import JSONDecodeError as RequestsJSONDecodeError
 from dateutil.parser import isoparse
+from pydantic import TypeAdapter, ValidationError
 
 from . import __version__
 from .classes import (
@@ -28,8 +28,6 @@ from .classes import (
     ResoniteLink,
     ResoniteRecord,
     ResoniteUser,
-    supporterMetadataTypeMapping,
-    resoniteUserEntitlementTypeMapping,
     ResoniteUserEntitlementShoutOut,
     ResoniteUserEntitlementCredits,
     ResoniteMessage,
@@ -65,11 +63,15 @@ from resonitepy.exceptions import (
     ResoniteException,
 )
 
+T = TypeVar('T')
+
 logger = logging.getLogger(__name__)
 
 AUTHFILE_NAME = "auth.token"
 # From PolyLogix/CloudX.js, the token seems to expire after 3600000 seconds (1 hour)
 TOKEN_EXPIRY_SECONDS = 3600000
+
+_TYPE_ADAPTERS: Dict[type, TypeAdapter] = {}
 
 try:
     DEBUG = json.loads(os.environ.get('DEBUG', 'False').lower())
@@ -77,128 +79,33 @@ except json.decoder.JSONDecodeError:
     logger.error("Debug must be True or False")
     exit(1)
 
-_CLASS_PREPROCESSORS = {}
-
-def register_preprocessor(data_class: type, preprocessor: Callable[[dict], dict]):
-    """Register a preprocessor for a specific class"""
-    _CLASS_PREPROCESSORS[data_class] = preprocessor
-
-def preprocess_resonite_message(data: dict) -> dict:
-    """Context-aware preprocessor for ResoniteMessage"""
-    data = data.copy()
-
-    if isinstance(data.get('content'), str):
-        message_type = data.get('messageType')
-        if message_type == 'Text':
-            data['content'] = ResoniteMessageContentText(content=data['content'])
-        elif message_type == 'SessionInvite':
-            content_data = json.loads(data['content']) if isinstance(data['content'], str) else data['content']
-            data['content'] = to_class(ResoniteMessageContentSessionInvite, content_data, DACITE_CONFIG)
-        elif message_type == 'InviteRequest':
-            content_data = json.loads(data['content']) if isinstance(data['content'], str) else data['content']
-            data['content'] = to_class(ResoniteMessageContentRequestInvite, content_data, DACITE_CONFIG)
-        elif message_type == 'Object':
-            content_data = json.loads(data['content']) if isinstance(data['content'], str) else data['content']
-            data['content'] = to_class(ResoniteMessageContentObject, content_data, DACITE_CONFIG)
-        elif message_type == 'Sound':
-            content_data = json.loads(data['content']) if isinstance(data['content'], str) else data['content']
-            data['content'] = to_class(ResoniteMessageContentSound, content_data, DACITE_CONFIG)
-
-    return data
-
-def preprocess_resonite_user(data: dict) -> dict:
-    """Context-aware preprocessor for ResoniteUser"""
-    data = data.copy()
-
-    # Handle 2FA field rename
-    if '2fa_login' in data:
-        data['two_fa_login'] = data['2fa_login']
-        del data['2fa_login']
-
-    # Handle entitlements
-    if 'entitlements' in data:
-        entitlements = []
-        for entitlement in data['entitlements']:
-            if '$type' in entitlement:
-                entitlement_type = entitlement['$type']
-                del entitlement['$type']
-                entitlements.append(
-                    to_class(
-                        resoniteUserEntitlementTypeMapping[entitlement_type],
-                        entitlement,
-                        DACITE_CONFIG
-                    )
-                )
-        data['entitlements'] = entitlements
-
-    # Handle supporter metadata
-    if 'supporterMetadata' in data:
-        supporter_metadata = []
-        for supporterMetadata in data['supporterMetadata']:
-            if '$type' in supporterMetadata:
-                supporterMetadata_type = supporterMetadata['$type']
-                del supporterMetadata['$type']
-                supporter_metadata.append(
-                    to_class(
-                        supporterMetadataTypeMapping[supporterMetadata_type],
-                        supporterMetadata,
-                        DACITE_CONFIG
-                    )
-                )
-        data['supporterMetadata'] = supporter_metadata
-
-    return data
-
-DACITE_CONFIG = dacite.Config(
-    cast=[
-        ResoniteMessageType,
-        RecordType,
-        OnlineStatus,
-        CurrentResoniteSessionAccessLevel,
-        ContactStatus,
-    ],
-    type_hooks={
-        datetime: isoparse,
-        ParseResult: urlparse,
-    },
-    strict=DEBUG,
-    strict_unions_match=DEBUG,
-)
-
-def to_class(data_class: type , data: dict, config: dacite.Config) -> object:
+def to_class(data_class: type[T], data: dict) -> T:
     """ Converts a dictionary to an instance of the specified data class.
 
     Args:
         data_class (type): The type of the data class to convert to.
         data (dict): The dictionary containing the data to convert.
-        config (dacite.Config): The Dacite configuration for the conversion.
 
     Returns:
         object: An instance of the specified data class.
 
     Raises:
-        Exception: If an error occurs during the conversion.
+        ResoniteParseError: If the data doesn't match the class.
 
     Example:
         >>> data = {'globalVersion': 1, 'localVersion': 2}
-        >>> config = dacite.Config()
-        >>> record_version = to_class(ResoniteRecordVersion, data, config)
+        >>> record_version = to_class(ResoniteRecordVersion, data)
     """
+    if data_class not in _TYPE_ADAPTERS:
+        _TYPE_ADAPTERS[data_class] = TypeAdapter(data_class)
     try:
-        # Apply registered preprocessor if available
-        if data_class in _CLASS_PREPROCESSORS:
-            data = _CLASS_PREPROCESSORS[data_class](data)
-
-        return dacite.from_dict(data_class, data, config)
-    except Exception as exc:
-        logger.error(f'Error converting to class {data_class.__name__}')
+        return _TYPE_ADAPTERS[data_class].validate_python(data)
+    except ValidationError as exc:
+        logger.error('Error converting to class %s', data_class.__name__)
         if DEBUG:
-            logger.error("With data:")
-            logger.error(data)
-        logger.exception(exc)
+            logger.error("With data: %s", data)
+        raise resonite_exceptions.ResoniteParseError(data_class, data, exc) from exc
 
-register_preprocessor(ResoniteMessage, preprocess_resonite_message)
-register_preprocessor(ResoniteUser, preprocess_resonite_user)
 
 @dataclasses.dataclass
 class Client:
@@ -545,9 +452,9 @@ class Client:
         """
         result = []
         for raw_item in data:
-            item = to_class(ResoniteRecord, raw_item, DACITE_CONFIG)
-            print(recordTypeMapping[item.recordType])
-            x = to_class(recordTypeMapping[item.recordType], raw_item, DACITE_CONFIG)
+            item = to_class(ResoniteRecord, raw_item)
+            record_class = recordTypeMapping.get(item.recordType, ResoniteRecord)
+            x = to_class(record_class, raw_item)
             result.append(x)
         return result
 
@@ -563,44 +470,6 @@ class Client:
             A list of ResoniteRecord objects.
         """
         return Client.process_record_ist(data=data)
-
-    def to_resonite_user(self, data: dict) -> dict:
-        """DEPRECATED: Preprocessing now handled by DACITE type_hooks"""
-        if 'entitlements' in data:
-            entitlements = []
-            for entitlement in data['entitlements']:
-                if '$type' in entitlement:
-                    entitlement_type = entitlement['$type']
-                    del entitlement['$type']
-                    entitlements.append(
-                        to_class(
-                            resoniteUserEntitlementTypeMapping[entitlement_type],
-                            entitlement,
-                            DACITE_CONFIG
-                        )
-                    )
-            data['entitlements'] = entitlements
-
-        if '2fa_login' in data:
-            data['two_fa_login'] = data['2fa_login']
-            del data['2fa_login']
-
-        if 'supporterMetadata' in data:
-            supporter_metadata = []
-            for supporterMetadata in data['supporterMetadata']:
-                if '$type' in supporterMetadata:
-                    supporterMetadata_type = supporterMetadata['$type']
-                    del supporterMetadata['$type']
-                    supporter_metadata.append(
-                        to_class(
-                            supporterMetadataTypeMapping[supporterMetadata_type],
-                            supporterMetadata,
-                            DACITE_CONFIG
-                        )
-                    )
-            data['supporterMetadata'] = supporter_metadata
-
-        return data
 
     def getUserData(self, user: str = None) -> ResoniteUser:
         """ Retrieves user data for the specified user.
@@ -621,7 +490,7 @@ class Client:
             user = self.userId
 
         response = self.request('get', f"/users/{user}")
-        return to_class(ResoniteUser, response, DACITE_CONFIG)
+        return to_class(ResoniteUser, response)
 
     def getMemberships(self) -> List[ResoniteUserMembership]:
         """ Retrieve current connected user group memberships.
@@ -634,7 +503,7 @@ class Client:
             logger.error("Client not logged in")
 
         response = self.request('get', f'/users/{self.userId}/Memberships')
-        return [to_class(ResoniteUserMembership, group, DACITE_CONFIG) for group in response]
+        return [to_class(ResoniteUserMembership, group) for group in response]
 
     def getGroup(self, groupId: str) -> ResoniteGroup:
         """ Retrieve group information.
@@ -646,7 +515,7 @@ class Client:
             ResoniteGroup: An object with the group information.
         """
         response = self.request('get', f'/groups/{groupId}')
-        return to_class(ResoniteGroup, response, DACITE_CONFIG)
+        return to_class(ResoniteGroup, response)
 
     def getGroupMembers(self, groupId: str) -> List[ResoniteGroupMember]:
         """ Retrieve members from a group.
@@ -658,7 +527,7 @@ class Client:
             List[ResoniteGroupMember]: A list with the group members.
         """
         response = self.request('get', f'/groups/{groupId}/members')
-        return [to_class(ResoniteGroupMember, group_member, DACITE_CONFIG) for group_member in response]
+        return [to_class(ResoniteGroupMember, group_member) for group_member in response]
 
     def getGroupMember(self, groupId: str, userId: str) -> ResoniteGroupMember:
         """ Retrieve a member from a group.
@@ -670,7 +539,7 @@ class Client:
             ResoniteGroupMember: An object with the member information.
         """
         response = self.request('get', f'/groups/{groupId}/members/{userId}')
-        return to_class(ResoniteGroupMember, response, DACITE_CONFIG)
+        return to_class(ResoniteGroupMember, response)
 
     def getSessions(
         self,
@@ -702,7 +571,7 @@ class Client:
         """
         # TODO: Implement the search for the sessions
         response = self.request('get', '/sessions')
-        return [to_class(ResoniteSession, session, DACITE_CONFIG) for session in response]
+        return [to_class(ResoniteSession, session) for session in response]
 
     def getSession(self, session_id: str) -> ResoniteSession:
         """ Retrieves session information for the specified session ID.
@@ -718,7 +587,7 @@ class Client:
             >>> session = client.getSession('12345')
         """
         response = self.request('get', f'/sessions/{session_id}')
-        return to_class(ResoniteSession, response, DACITE_CONFIG)
+        return to_class(ResoniteSession, response)
 
     def getContacts(self) -> List[ResoniteContact]:
         """ Retrieves the contacts of the client.
@@ -731,7 +600,7 @@ class Client:
             >>> contacts = client.getContacts()
         """
         response = self.request('get', f"/users/{self.userId}/contacts")
-        return [to_class(ResoniteContact, user, DACITE_CONFIG) for user in response]
+        return [to_class(ResoniteContact, user) for user in response]
 
     def getInventory(self) -> List[ResoniteRecord]:
         """ Retrieves the inventory of the user.
@@ -848,7 +717,7 @@ class Client:
             'get',
             f"/{record_type}/{owner_id}/records/{record_path}",
         )
-        return to_class(ResoniteDirectory, response, DACITE_CONFIG)
+        return to_class(ResoniteDirectory, response)
 
     def getMessageLegacy(
         self,
@@ -900,7 +769,7 @@ class Client:
 
         messages = []
         for message in response:
-            messages.append(to_class(ResoniteMessage, message, DACITE_CONFIG))
+            messages.append(to_class(ResoniteMessage, message))
 
         return messages
 
@@ -945,7 +814,7 @@ class Client:
             'get',
             f'/{self.getOwnerPath(ownerId)}/{ownerId}/vars'
         )
-        return [to_class(ResoniteCloudVar, cloud_var, DACITE_CONFIG) for cloud_var in response]
+        return [to_class(ResoniteCloudVar, cloud_var) for cloud_var in response]
 
     def getCloudVar(self, ownerId: str, path: str) -> ResoniteCloudVar:
         """ Retrieves a cloud variable for the specified owner and path.
@@ -965,7 +834,7 @@ class Client:
             'get',
             f'/{self.getOwnerPath(ownerId)}/{ownerId}/vars/{path}'
         )
-        return to_class(ResoniteCloudVar, response, DACITE_CONFIG)
+        return to_class(ResoniteCloudVar, response)
 
     def getCloudVarDefs(self, ownerId: str, path: str) -> ResoniteCloudVarDefs:
         """ Retrieves the cloud variable definitions for the specified owner and path.
@@ -998,7 +867,7 @@ class Client:
         if not response:
             raise ResoniteException(f"{ownerId} {path} doesn't exist")
 
-        return to_class(ResoniteCloudVarDefs, response[0]['definition'], DACITE_CONFIG)
+        return to_class(ResoniteCloudVarDefs, response[0]['definition'])
 
     def setCloudVar(self, ownerId: str, path: str, value: str) -> None:
         """ Sets the value of a cloud variable for the specified owner and path.
@@ -1048,7 +917,7 @@ class Client:
         )
         users = []
         for user in response:
-            users.append(to_class(ResoniteUser, user, DACITE_CONFIG))
+            users.append(to_class(ResoniteUser, user))
         return users
 
     def getUser(self, userId: str) -> ResoniteUser:
@@ -1061,17 +930,17 @@ class Client:
             ResoniteUser: The user
         """
         response = self.request('get', f'/users/{userId}')
-        return to_class(ResoniteUser, response, DACITE_CONFIG)
+        return to_class(ResoniteUser, response)
 
     def getUserByName(self, userId) -> ResoniteUser:
         reponse = self.request('get', f'/users/{userId}?byUsername=True')
-        return to_class(ResoniteUser, reponse, DACITE_CONFIG)
+        return to_class(ResoniteUser, reponse)
 
     def platform(self) -> Platform:
         """ Return information about the platform.
         """
         response = self.request('get', '/platform')
-        return to_class(Platform, response, DACITE_CONFIG)
+        return to_class(Platform, response)
 
     def badges(self) -> List[ResoniteBadge]:
         """ Return a list of ResoniteBadge object.
@@ -1099,5 +968,5 @@ class Client:
                     "url": row[1],
                     "slotName": row[2]
                 }
-                badges.append(to_class(ResoniteBadge, badge_dict, DACITE_CONFIG))
+                badges.append(to_class(ResoniteBadge, badge_dict))
         return badges
