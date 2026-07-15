@@ -45,3 +45,8 @@ class ResoniteParseError(ResoniteException):
         self.data = data
         self.error = error
         super().__init__(f"Failed to parse {data_class.__name__}: {error}")
+
+class ResoniteHubException(ResoniteException):
+    """ Raised when a hub invocation fails, times out, or the hub is not connected.
+    """
+    pass

@@ -25,10 +25,12 @@ async def debug_con_with_hub():
         )
     )
 
-    headers = client.headers
-    hub = HubManager(client.headers)
+    hub = HubManager(client)
 
     await hub.connect()
+
+    result = await hub.invoke("RequestStatus", None, False)
+    print(f"RequestStatus completion: {result!r}")
 
     def handle_receive_message(args):
         print(f"Message received: {args}")
@@ -40,7 +42,7 @@ async def debug_con_with_hub():
 
     def handle_status_update(args):
         print(f"Status Update received: {args}")
-    hub.on(EventTarget.receiveSessionUpdate, handle_status_update)
+    hub.on(EventTarget.receiveStatusUpdate, handle_status_update)
 
     def handle_sessions_update(args):
         print(f"Sessions Update received: {args}")

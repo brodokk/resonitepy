@@ -745,6 +745,32 @@ class DataModelAssemblies:
     name: str
     compatibilityHash: str
 
+class UserSessionType(UnknownEnumMixin, Enum):
+    """ Enum representing the kind of client behind a user session.
+    """
+
+    GRAPHICAL_CLIENT = "GraphicalClient"
+    """The full Resonite client."""
+    CHAT_CLIENT = "ChatClient"
+    """A chat-only client."""
+    HEADLESS = "Headless"
+    """A headless server."""
+    BOT = "Bot"
+    """A bot."""
+    UNKNOWN = "__unknown__"
+    """Fallback for session types this module doesn't know yet."""
+
+@resonite_class
+class ResoniteSessionMetadata:
+    """ Datra class representing one session entry inside a hub status update.
+    """
+
+    sessionHash: str
+    accessLevel: CurrentResoniteSessionAccessLevel
+    sessionHidden: bool
+    isHost: bool
+    broadcastKey: Optional[str] = None
+
 @resonite_class
 class ResoniteSession:
     """ Data class representing a Resonite session.
@@ -796,9 +822,9 @@ class ResoniteSession:
     """The timestamp of the session begin time."""
     sessionId: str
     """The session ID."""
-    nestedSessionIds: List[str]
+    nestedSessionIds: Optional[List[str]] = None
     """The IDs of the sessions nested under this session."""
-    parentSessionIds: List[str]
+    parentSessionIds: Optional[List[str]] = None
     """The IDs of the parent sessions of this session."""
     sessionURLs: List[str]
     """The URLs of the session."""
@@ -831,6 +857,12 @@ class PublicRSAKey:
     """The exponent of the RSA key."""
     Modulus: str
     """The modulus of the RSA key."""
+    P: Optional[str] = None
+    Q: Optional[str] = None
+    DP: Optional[str] = None
+    DQ: Optional[str] = None
+    InverseQ: Optional[str] = None
+    D: Optional[str] = None
 
 
 class OnlineStatus(UnknownEnumMixin, Enum):
@@ -841,8 +873,44 @@ class OnlineStatus(UnknownEnumMixin, Enum):
     AWAY = "Away"
     BUSY = "Busy"
     OFFLINE = "Offline"
+    SOCIABLE = "Sociable"
+    INVISIBLE = "Invisible"
     UNKNOWN = "__unknown__"
 
+@resonite_class
+class ResoniteHubUserStatus:
+    """ Data class representing a user status as sent by the hub's event."""
+
+    userId: str
+    """The ID of the user this status belongs to."""
+    userSessionId: str
+    """The ID of the user session broadcasting this status."""
+    sessionType: UserSessionType
+    """The kind of client behind this user session."""
+    isMobile: bool
+    """Whether the user is on a mobile device."""
+    isPresent: bool
+    """Whether the user is present at their device."""
+    lastStatusChange: datetime
+    """The timestamp of the last status change."""
+    hashSalt: str
+    """Salt used to hash the session ids in sessions."""
+    appVersion: str
+    """The version of the app broadcasting this status."""
+    sessions: List[ResoniteSessionMetadata]
+    """The sessions the user is currently in (hashed)."""
+    currentSessionIndex: int
+    """The index is sessions of the user's current session."""
+    onlineStatus: Optional[OnlineStatus] = None
+    """The online status of the user. Headless sessions send none."""
+    outputDevice: Optional[str] = None
+    """The output device of the user."""
+    lastPresenceTimestamp: Optional[datetime] = None
+    """The timestamp of the last presence change."""
+    compatibilityHash: Optional[str] = None
+    """The compatibility hash."""
+    publicRSAKey: Optional[PublicRSAKey] = None
+    """The public RSA key of this user session."""
 
 @resonite_class
 class UserStatusData:
@@ -911,7 +979,9 @@ class ContactStatus(UnknownEnumMixin, Enum):
     IGNORED = "Ignored"
     """The contact request has been ignored."""
     REQUESTED = "Requested"
-    """ The contact request has been sent but not yet accepted."""
+    """The contact request has been sent but not yet accepted."""
+    BLOCKED = "Blocked"
+    """The contact is blocked."""
     NONE = "None"
     """No contact status."""
     UNKNOWN = "__unknown__"

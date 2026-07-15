@@ -2,6 +2,7 @@
 This module defines the Resonite client, which interacts with the Resonite API.
 """
 
+import asyncio
 import re
 import json
 import os
@@ -21,6 +22,7 @@ from pydantic import TypeAdapter, ValidationError
 from . import __version__
 from .classes import (
     LoginDetails,
+    ContactStatus,
     ResoniteDirectory,
     ResoniteContact,
     ResoniteLink,
@@ -146,6 +148,32 @@ class Client:
             return default
         default["Authorization"] = f"res {self.userId}:{self.token}"
         return default
+
+    async def _run_with_hub(self, operation):
+        """ Connect a throwaway hub, run on operation with it, disconnect.
+        """
+        from resonitepy.hub_manager import HubManager
+
+        hub = HubManager(self)
+        await hub.connect()
+        try:
+            return await operation(hub)
+        finally:
+            await hub.disconnect()
+
+    def _hub_operation(self, operation):
+        """ Run a one-shot hub operation from synchronous code.
+        """
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            pass  # no loop running, safe to proceed
+        else:
+            raise resonite_exceptions.ResoniteHubException(
+                "This method was called inside an async context - "
+                "use HubManager directly (async) instead of the sync Client methods"
+            )
+        return asyncio.run(self._run_with_hub(operation))
 
     def request(
             self,
@@ -587,6 +615,27 @@ class Client:
         """
         response = self.request('get', f"/users/{self.userId}/contacts")
         return [to_class(ResoniteContact, user) for user in response]
+
+    def add_contact(self, user_id: str):
+        """ Send a contact request to a user.
+        """
+        self._hub_operation(lambda hub: hub.add_contact(user_id))
+
+    def accept_contact_request(self, user_id: str):
+        """ Accept a pending contact request.
+        """
+        self._hub_operation(lambda hub: hub.decline_contact_request(user_id))
+
+    def remove_contact(self, user_id: str):
+        """ Remove a contact.
+        """
+        self._hub_operation(lambda hub: hub.remove_contact(user_id))
+
+    def set_contact_status(self, user_id: str, status: ContactStatus, timeout: float = 5.0):
+        """ Set user side of the relationship to an explicit status.
+        See HubManager.set_contact_status for what each status does.
+        """
+        self._hub_operation(lambda hub: hub.set_contact_status(user_id, status, timeout))
 
     def getInventory(self) -> List[ResoniteRecord]:
         """ Retrieves the inventory of the user.

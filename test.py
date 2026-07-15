@@ -13,6 +13,7 @@ Usage:
     python test.py
 """
 
+import asyncio
 import dataclasses
 import os
 import sys
@@ -23,6 +24,7 @@ os.environ["RESONITEPY_DRIFT"] = "1"
 
 from resonitepy.classes import ResoniteDirectory, ResoniteLink, ResoniteObject, ResoniteWorld, ResoniteTexture, ResoniteAudio
 from resonitepy.client import Client
+from resonitepy.hub_manager import HubManager, EventTarget
 from resonitepy.exceptions import ResoniteException, ResoniteAPIException, InvalidToken
 from resonitepy import classes
 
@@ -31,6 +33,7 @@ LOG_PATH = f"test_logs/test_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
 DRIFT = []
 DRIFT_OPTIONAL = []
 CLASS_SENT = {}
+EXTRA_FIELDS_SEEN = set()
 
 
 def collect_drift(obj, path=""):
@@ -47,7 +50,10 @@ def collect_drift(obj, path=""):
         declared = {f.name for f in dataclasses.fields(obj)}
         for key, value in vars(obj).items():
             if key not in declared and not key.startswith("_"):
-                found.append(f"{path}.{key}: API sends this field but {cls.__name__} doesn't declare it (value: {value!r})")
+                dedupe_key = (cls.__name__, key)
+                if dedupe_key not in EXTRA_FIELDS_SEEN:
+                    EXTRA_FIELDS_SEEN.add(dedupe_key)
+                    found.append(f"{path}.{key}: API sends this field but {cls.__name__} doesn't declare it (value: {value!r})")
         for f in dataclasses.fields(obj):
             found.extend(collect_drift(getattr(obj, f.name), f"{path}.{f.name}"))
     elif isinstance(obj, Enum):
@@ -233,6 +239,57 @@ client.setCloudVar(client.userId, f"{client.userId}.resonitepy_test", 'false')
 cloud_var = check(client.getCloudVar(client.userId, f"{client.userId}.resonitepy_test"), "getCloudVar")
 print(f"getCloudVar response after setting false: {cloud_var}")
 
+print("hub smoke (async): connect, RequestStatus, listen 5s")
+
+async def hub_smoke():
+    hub = HubManager(client)
+    await hub.connect()
+    status_events = []
+    contact_events = []
+    hub.on(EventTarget.receiveStatusUpdate, status_events.append)
+    hub.on(EventTarget.contactAddedOrUpdated, contact_events.append)
+    result = await hub.invoke("RequestStatus", None, False)
+    await asyncio.sleep(5)
+    await hub.disconnect()
+    return result, status_events, contact_events
+
+hub_result, status_events, contact_events = asyncio.run(hub_smoke())
+print(f"RequestStatus completion: {hub_result!r}, "
+      f"{len(status_events)} status update(s), {len(contact_events)} contact event(s)")
+for args in status_events:
+    check(args, "hub.ReceiveStatusUpdate")
+for args in contact_events:
+    check(args, "hub.ContactAddedOrUpdated")
+
+if config.get('friend_owner_id'):
+    friend_id = config['friend_owner_id']
+
+    def contact_status(other_id):
+        rows = client.request('get', f"/users/{client.userId}/contacts")
+        row = next((r for r in rows if r.get("id") == other_id), None)
+        return row["contactStatus"] if row else None
+
+    print(f"contact dance (sync facade) with {friend_id}")
+    print(f"before        : {contact_status(friend_id)}")
+
+    client.remove_contact(friend_id)
+    status = contact_status(friend_id)
+    print(f"after remove  : {status}")
+    assert status == "Ignored", f"remove_contact should set Ignored, got {status}"
+
+    client.set_contact_status(friend_id, classes.ContactStatus.NONE)
+    status = contact_status(friend_id)
+    print(f"after reset   : {status}")
+    assert status == "None", f"set_contact_status(NONE) should set None, got {status}"
+
+    client.add_contact(friend_id)
+    status = contact_status(friend_id)
+    print(f"after add     : {status}")
+    assert status == "Accepted", f"add_contact should set Accepted, got {status}"
+    print("contact dance OK: remove -> Ignored, reset -> None, add -> Accepted")
+else:
+    print("no friend_owner_id in testconf.toml, skipping the contact dance")
+
 for cls, sent in CLASS_SENT.items():
     for field_name, info in cls.__pydantic_fields__.items():
         api_name = info.alias or field_name
@@ -250,3 +307,5 @@ if DRIFT:
         print(f"  {finding}")
 if not DRIFT and not DRIFT_OPTIONAL:
     print("=== no API drift detected ===")
+else:
+    sys.exit(1)

@@ -1,16 +1,20 @@
 import logging
+from uuid import uuid4
 from typing import Dict, Optional, Callable, List
 import websockets
 import json
 import asyncio
 from enum import Enum
 
-from resonitepy.client import to_class
-from resonitepy.classes import ResoniteSession, ResoniteSession, ResoniteMessage
-from resonitepy.endpoints import HUB_URL
+from websockets.asyncio.client import ClientConnection
 
+from resonitepy.client import to_class
+from resonitepy.classes import ResoniteSession, ResoniteMessage, ResoniteHubUserStatus, ContactStatus, ResoniteContact
+from resonitepy.endpoints import HUB_URL
+from resonitepy import exceptions as resonite_exceptions
 
 class EventType(Enum):
+    undefined = 0
     invocation = 1
     streamItem = 2
     completion = 3
@@ -18,22 +22,28 @@ class EventType(Enum):
     cancelInvocation = 5
     ping = 6
     close = 7
-    undefined = 1
 
 class EventTarget(Enum):
-    receiveStatusUpdate = ("ReceiveStatusUpdate", [ResoniteSession])
+    receiveStatusUpdate = ("ReceiveStatusUpdate", [ResoniteHubUserStatus])
     receiveSessionUpdate = ("ReceiveSessionUpdate", [ResoniteSession])
     messageSent = ("MessageSent", [ResoniteMessage])
     receivedMessage = ("ReceiveMessage", [ResoniteMessage])
-    messageRead = ("MessageRead", [])
+    messagesRead = ("MessagesRead", [])
     remove_session = ("RemoveSession", [])
+    contactAddedOrUpdated = ("ContactAddedOrUpdated", [ResoniteContact])
 
 class HubManager:
 
-    def __init__(self, auth_headers: Dict[str, str]):
-        self.auth_headers = auth_headers
+    def __init__(self, client_or_headers):
+        if isinstance(client_or_headers, dict):
+            self._client = None
+            self.auth_headers = client_or_headers
+        else:
+            self._client = client_or_headers
+            self.auth_headers = client_or_headers.headers
         self._handlers: Dict[EventTarget, Callable] = {}
-        self._websocket: Optional[websockets.WebSocketServerProtocol] = None
+        self._pending: Dict[str, asyncio.Future] = {}
+        self._websocket: Optional[ClientConnection] = None
         self._connected = False
         self._eof = "\x1e"
 
@@ -52,11 +62,12 @@ class HubManager:
             # Start message handling
             asyncio.create_task(self._handle_messages())
             self._connected = True
-            logging.info("COnnected to Resonite Hub")
+            logging.info("Connected to Resonite Hub")
 
         except Exception as e:
             logging.error(f"Connection failed: {e}")
             raise
+
     async def disconnect(self):
         if self._websocket:
             await self._websocket.close()
@@ -66,7 +77,7 @@ class HubManager:
 
     def on(self, event_target: EventTarget, callback: Callable):
         self._handlers[event_target] = callback
-        logging.debug(f"Registred handler for {event_target.value}")
+        logging.debug(f"Registered handler for {event_target.value}")
 
     async def _handle_messages(self):
         try:
@@ -85,6 +96,14 @@ class HubManager:
                             logging.warning(f"Non-JSON message: {part}")
         except Exception as e:
             logging.error(f"Message handling error: {e}")
+        finally:
+            self._connected = False
+            for future in self._pending.values():
+                if not future.done():
+                    future.set_exception(
+                        resonite_exceptions.ResoniteHubException("Hub connection closed")
+                    )
+            self._pending.clear()
 
     async def _process_message(self, data: Dict):
         msg_type = data.get("type", -1)
@@ -112,6 +131,21 @@ class HubManager:
                     except Exception as e:
                         logging.error(f"Event handler error for {target}: {e}")
 
+        if msg_type == EventType.completion.value:
+            future = self._pending.get(data.get("invocationId"))
+            if future and not future.done():
+                if data.get("error"):
+                    future.set_exception(
+                        resonite_exceptions.ResoniteHubException(data["error"])
+                    )
+                else:
+                    future.set_result(data.get("result"))
+            return
+
+        if msg_type == EventType.close.value:
+            logging.error(f"Hub sent close: {data.get('error')}")
+            return
+
     def _find_target(self, target_name: str) -> Optional[EventTarget]:
         """Find EventTarget enum by target name"""
         for target in EventTarget:
@@ -135,3 +169,110 @@ class HubManager:
                 deserialized.append(raw_arg)
 
         return deserialized
+
+    async def send(self, target: str, *args):
+        """ Invoke a hub function without waiting for a result (fire-and-forget).
+        """
+        if not self._connected:
+            raise resonite_exceptions.ResoniteHubException("Hub is not connected")
+        frame = {"type": EventType.invocation.value, "target": target, "arguments": list(args)}
+        await self._websocket.send(json.dumps(frame) + self._eof)
+
+    async def invoke(self, target: str, *args, timeout: float = 5.0):
+        """ Invoke a hub function and wait for its completion result.
+        """
+        if not self._connected:
+            raise resonite_exceptions.ResoniteHubException("Hub is not connected")
+        invocation_id = str(uuid4())
+        future = asyncio.get_running_loop().create_future()
+        self._pending[invocation_id] = future
+        frame = {
+            "type": EventType.invocation.value,
+            "invocationId": invocation_id,
+            "target": target,
+            "arguments": list(args),
+        }
+        try:
+            await self._websocket.send(json.dumps(frame) + self._eof)
+            return await asyncio.wait_for(future, timeout)
+        except asyncio.TimeoutError:
+            raise resonite_exceptions.ResoniteHubException(
+                f"{target} invocation timed out after {timeout}s"
+            )
+        finally:
+            self._pending.pop(invocation_id, None)
+
+    async def add_contact(self, user_id: str, timeout: float = 5.0):
+        """ Send a contact request to a user, or accept a pending one.
+        """
+        await self.set_contact_status(user_id, ContactStatus.ACCEPTED, timeout)
+
+    async def accept_contact_request(self, user_id: str, timeout: float = 5.0):
+        """ Accept a pending contact request.
+        """
+        await self.set_contact_status(user_id, ContactStatus.ACCEPTED, timeout)
+    
+    async def decline_contact_request(self, user_id: str, timeout: float = 5.0):
+        """ Decline a pending contact request.
+        """
+        await self.set_contact_status(user_id, ContactStatus.IGNORED, timeout)
+
+    async def remove_contact(self, user_id: str, timeout: float = 5.0):
+        """ Remove a contact.
+
+        Using `Ignored` to match the official Resonite client behavior
+        (anti-abuse, see https://github.com/Yellow-Dog-Man/Resonite-Issues/issues/4035#issuecomment-2770449855)
+        There will be no notification of any new pending request to accept for this user.
+
+        To enable the ability to receive a notification for any new pending request for this
+        user in the future use the function use set_contact_status(user_id,
+        ContactStatus.NONE).
+        """
+        await self.set_contact_status(user_id, ContactStatus.IGNORED, timeout)
+
+    async def set_contact_status(self, user_id: str, status: ContactStatus, timeout: float):
+        """ Set current user side of the contact relationship to an explicit status.
+
+        Prefer the intented methods (add_contact, accept_contact_request, decline_contact_request,
+        remove_contact) as they follow the official Resonite client behavior. Statues:
+
+        - ACCEPTED: send a contact request or accept a pending one.
+        - IGNORED: decline or remove a contact, future requests are silently muted.
+        - NONE: full reset, the user can send a new request again later.
+        - BLOCKED: no behavior known so far, worked as IGNORED.
+        - REQUESTED: set by the server on the receiving side, can be set manually turning the
+        relationship into a pending request on receiving side, no change on sending side.
+        """
+
+        if self._client is None:
+            raise resonite_exceptions.ResoniteHubException(
+                "Contact operations need HubManager(client) with a logged-in Client"
+            )
+
+        contacts = await asyncio.to_thread(self._client.getContacts)
+        existing = next((c for c in contacts if c.id == user_id), None)
+        if existing is not None:
+            username = existing.contactUsername
+            is_accepted = existing.isAccepted
+            latest_message_time = existing.latestMessageTime.isoformat()
+        else:
+            user = await asyncio.to_thread(self._client.getUser, user_id)
+            username = user.username
+            is_accepted = False
+            latest_message_time = "1970-01-01T00:00:00Z"
+
+        payload = {
+            "id": user_id,
+            "contactUsername": username,
+            "ownerId": self._client.userId,
+            "contactStatus": status.value,
+            "isAccepted": is_accepted,
+            "userStatus": {},
+            "profile": {},
+            "latestMessageTime": latest_message_time,
+        }
+        result = await self.invoke("UpdateContact", payload, timeout=timeout)
+        if result is not True:
+            raise resonite_exceptions.ResoniteHubException(
+                f"UpdateContact reject for {user_id}: {result}" 
+            )
