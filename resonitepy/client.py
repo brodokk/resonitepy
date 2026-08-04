@@ -2,6 +2,9 @@
 This module defines the Resonite client, which interacts with the Resonite API.
 """
 
+import threading
+import concurrent.futures
+import atexit
 import asyncio
 import re
 import json
@@ -11,7 +14,7 @@ import logging
 from datetime import datetime
 from hashlib import sha256
 from os import path
-from typing import Dict, List, TypeVar
+from typing import Dict, List, TypeVar, Literal
 from importlib.resources import files
 
 import requests
@@ -126,10 +129,16 @@ class Client:
     secretMachineIdSalt: str = None
     session: requests.Session = None
 
-    def __init__(self):
+    def __init__(self, cache: bool = True, cache_refresh_interval: float | None = 120):
         """Initialize a new Resonite API client instance."""
         self.session = requests.Session()
         self.session.headers['UID'] = sha256(os.urandom(16)).hexdigest().upper()
+        self._hub = None
+        self._hub_loop = None
+        self._hub_thread = None
+        self._hub_lock = threading.RLock()
+        self._hub_cache = cache
+        self._hub_cache_refresh_interval = cache_refresh_interval
 
     @property
     def headers(self) -> dict:
@@ -149,17 +158,49 @@ class Client:
         default["Authorization"] = f"res {self.userId}:{self.token}"
         return default
 
-    async def _run_with_hub(self, operation):
-        """ Connect a throwaway hub, run on operation with it, disconnect.
+    def _start_hub(self):
+        """ Start background event loop thread and connect the persistent hub.
         """
         from resonitepy.hub_manager import HubManager
 
-        hub = HubManager(self)
-        await hub.connect()
+        self._hub_loop = asyncio.new_event_loop()
+        self._hub_thread = threading.Thread(
+            target=self._hub_loop.run_forever, name="resonitepy-hub", daemon=True
+        )
+        self._hub_thread.start()
+
+        hub = HubManager(
+            self,
+            cache = self._hub_cache,
+            cache_refresh_interval = self._hub_cache_refresh_interval,
+        )
         try:
-            return await operation(hub)
-        finally:
-            await hub.disconnect()
+            asyncio.run_coroutine_threadsafe(hub.connect(), self._hub_loop).result(timeout=15)
+        except Exception:
+            self.hub_close()
+            raise
+        self._hub = hub
+        atexit.register(self.hub_close)
+
+    def hub_close(self):
+        """ Disconnect the persistent hub and stop its thread.
+        """
+        with self._hub_lock:
+            if self._hub is not None and self._hub_loop is not None:
+                try:
+                    asyncio.run_coroutine_threadsafe(
+                        self._hub.disconnect(), self._hub_loop
+                    ).result(timeout=5)
+                except Exception:
+                    pass
+            if self._hub_loop is not None:
+                self._hub_loop.call_soon_threadsafe(self._hub_loop.stop)
+                self._hub_thread.join(timeout=5)
+                self._hub_loop.close()
+            self._hub = None
+            self._hub_loop = None
+            self._hub_thread = None
+            atexit.unregister(self.hub_close)
 
     def _hub_operation(self, operation):
         """ Run a one-shot hub operation from synchronous code.
@@ -173,7 +214,19 @@ class Client:
                 "This method was called inside an async context - "
                 "use HubManager directly (async) instead of the sync Client methods"
             )
-        return asyncio.run(self._run_with_hub(operation))
+        with self._hub_lock:
+            if self._hub is not None and not self._hub.connected:
+                self.hub_close()
+            if self._hub is None:
+                self._start_hub()
+            hub, loop = self._hub, self._hub_loop
+        future = asyncio.run_coroutine_threadsafe(operation(hub), loop)
+        try:
+            return future.result(timeout=30)
+        except concurrent.futures.TimeoutError as e:
+            raise resonite_exceptions.ResoniteHubException(
+                "Hub operation timed out"
+            ) from e
 
     def request(
             self,
@@ -306,6 +359,7 @@ class Client:
                 "/userSessions/{}/{}".format(self.userId, self.token),
                 ignoreUpdate=True,
             )
+        self.hub_close()
         self.clean_session()
 
     def clean_session(self) -> None:
@@ -603,6 +657,24 @@ class Client:
         response = self.request('get', f'/sessions/{session_id}')
         return to_class(ResoniteSession, response)
 
+    def get_contacts(self, source: Literal["auto", "hub", "rest"] = "auto", force: bool = False) -> List[ResoniteContact]:
+        """ Retrieves the contacts of the client.
+
+        Returns:
+            List[ResoniteContact]: A list of ResoniteContact objects representing the contacts.
+
+        Examples:
+            >>> client = Client()
+            >>> contacts = client.getContacts()
+        """
+        if source == "auto":
+            source = "hub" if (self._hub is not None and self._hub.connected) else "rest"
+        if source == "hub":
+            return self._hub_operation(lambda hub: hub.get_contacts(force=force))
+        response = self.request('get', f"/users/{self.userId}/contacts")
+        return [to_class(ResoniteContact, user) for user in response]
+
+    @deprecated_alias(get_contacts)
     def getContacts(self) -> List[ResoniteContact]:
         """ Retrieves the contacts of the client.
 
@@ -613,8 +685,7 @@ class Client:
             >>> client = Client()
             >>> contacts = client.getContacts()
         """
-        response = self.request('get', f"/users/{self.userId}/contacts")
-        return [to_class(ResoniteContact, user) for user in response]
+        return self.get_contacts()
 
     def add_contact(self, user_id: str):
         """ Send a contact request to a user.
@@ -623,6 +694,11 @@ class Client:
 
     def accept_contact_request(self, user_id: str):
         """ Accept a pending contact request.
+        """
+        self._hub_operation(lambda hub: hub.accept_contact_request(user_id))
+
+    def decline_contact_request(self, user_id: str):
+        """ Decline a pending contact request.
         """
         self._hub_operation(lambda hub: hub.decline_contact_request(user_id))
 

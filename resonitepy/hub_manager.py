@@ -2,26 +2,17 @@ import logging
 from uuid import uuid4
 from typing import Dict, Optional, Callable, List
 import websockets
-import json
 import asyncio
 from enum import Enum
 
 from websockets.asyncio.client import ClientConnection
+from pydantic import BaseModel
 
 from resonitepy.client import to_class
 from resonitepy.classes import ResoniteSession, ResoniteMessage, ResoniteHubUserStatus, ContactStatus, ResoniteContact
 from resonitepy.endpoints import HUB_URL
 from resonitepy import exceptions as resonite_exceptions
-
-class EventType(Enum):
-    undefined = 0
-    invocation = 1
-    streamItem = 2
-    completion = 3
-    streamInvocation = 4
-    cancelInvocation = 5
-    ping = 6
-    close = 7
+from resonitepy import signalr
 
 class EventTarget(Enum):
     receiveStatusUpdate = ("ReceiveStatusUpdate", [ResoniteHubUserStatus])
@@ -32,9 +23,14 @@ class EventTarget(Enum):
     remove_session = ("RemoveSession", [])
     contactAddedOrUpdated = ("ContactAddedOrUpdated", [ResoniteContact])
 
+ACTIVATIONS = {
+    EventTarget.receiveStatusUpdate:
+        lambda hub: hub.invoke("RequestStatus", None, False),
+}
+
 class HubManager:
 
-    def __init__(self, client_or_headers):
+    def __init__(self, client_or_headers, cache: bool = True, cache_refresh_interval: float | None = 120):
         if isinstance(client_or_headers, dict):
             self._client = None
             self.auth_headers = client_or_headers
@@ -45,7 +41,23 @@ class HubManager:
         self._pending: Dict[str, asyncio.Future] = {}
         self._websocket: Optional[ClientConnection] = None
         self._connected = False
-        self._eof = "\x1e"
+        self._activated: set = set()
+        self._cache_enabled = cache
+        self._cache_refresh_interval = cache_refresh_interval
+        self._contacts_cache: Optional[Dict[str, ResoniteContact]] = None
+        self._refresh_task = None
+        self._reader_task = None
+
+    async def __aenter__(self):
+        await self.connect()
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        await self.disconnect()
+
+    @property
+    def connected(self) -> bool:
+        return self._connected
 
     async def connect(self):
         try:
@@ -55,47 +67,67 @@ class HubManager:
                 additional_headers=self.auth_headers,
             )
 
-            # Send negotiation
-            negotiation = json.dumps({"protocol": "json", "version": 1}) + self._eof
-            await self._websocket.send(negotiation)
+            # Send Handshake request
+            await self._send_message(signalr.HandshakeRequest())
+            # Wait for the server response
+            try:
+                first_frame = await asyncio.wait_for(self._websocket.recv(), timeout=5)
+            except asyncio.TimeoutError as e:
+                raise resonite_exceptions.ResoniteHubException("Handshake timed out") from e
+            # Validate it
+            leftover_messages = signalr.parse_handshake_response(first_frame)
+            # Process any messages received at the same time
+            for message in leftover_messages:
+                await self._process_message(message)
 
-            # Start message handling
-            asyncio.create_task(self._handle_messages())
+            self._reader_task = asyncio.create_task(self._handle_messages())
             self._connected = True
             logging.info("Connected to Resonite Hub")
 
         except Exception as e:
-            logging.error(f"Connection failed: {e}")
+            logging.error(f"Connection failed: {e!r}")
+            await self.disconnect()
             raise
 
     async def disconnect(self):
-        if self._websocket:
-            await self._websocket.close()
-            self._websocket = None
+        if self._websocket is None and not self._connected:
+            return
+
+        websocket, self._websocket = self._websocket, None
+
         self._connected = False
+        self._activated.clear()
+        if self._refresh_task is not None:
+            self._refresh_task.cancel()
+            self._refresh_task = None
+        if self._reader_task is not None and self._reader_task is not asyncio.current_task():
+            self._reader_task.cancel()
+        self._reader_task = None
+
+        if websocket is not None:
+            await websocket.close()
         logging.info("Disconnected from Hub")
 
     def on(self, event_target: EventTarget, callback: Callable):
         self._handlers[event_target] = callback
         logging.debug(f"Registered handler for {event_target.value}")
 
+    async def listen(self, *targets: EventTarget) -> None:
+        wanted = targets or tuple(self._handlers)
+        for target in wanted:
+            activation = ACTIVATIONS.get(target)
+            if activation is None or target in self._activated:
+                continue
+            await activation(self)
+            self._activated.add(target)
+
     async def _handle_messages(self):
         try:
-            async for message in self._websocket:
-                logging.info(f"Received: {repr(message)}")
-
-                # Parse multiple messages
-                parts = message.split(self._eof)
-                for part in parts:
-                    if part.strip():
-                        try:
-                            data = json.loads(part)
-                            logging.info(f"Parsed: {json.dumps(data, indent=2)}")
-                            await self._process_message(data)
-                        except json.JSONDecodeError:
-                            logging.warning(f"Non-JSON message: {part}")
+            async for frame in self._websocket:
+                for message in signalr.split_messages(frame):
+                    await self._process_message(message)
         except Exception as e:
-            logging.error(f"Message handling error: {e}")
+            logging.error(f"Message handling error: {e!r}")
         finally:
             self._connected = False
             for future in self._pending.values():
@@ -104,47 +136,63 @@ class HubManager:
                         resonite_exceptions.ResoniteHubException("Hub connection closed")
                     )
             self._pending.clear()
+            await self.disconnect()
 
-    async def _process_message(self, data: Dict):
-        msg_type = data.get("type", -1)
+    async def _process_message(self, message: signalr.HubMessage):
+        match message:
 
-        if msg_type == EventType.ping.value:
-            logging.debug("Received ping")
-            return
+            case signalr.Ping():
+                logging.debug("Received ping")
+                return
 
-        if msg_type == EventType.invocation.value:
-            target_name = data.get("target")
-            if target_name:
-                target = self._find_target(target_name)
-                if target and target in self._handlers:
-                    raw_args = data.get("arguments", [])
-
-                    _, arg_types = target.value
-                    deserialized_args = self._deserialize_args(raw_args, arg_types or [])
-
-                    try:
-                        handler = self._handlers[target]
-                        if asyncio.iscoroutinefunction(handler):
-                            await handler(deserialized_args)
-                        else:
-                            handler(deserialized_args)
-                    except Exception as e:
-                        logging.error(f"Event handler error for {target}: {e}")
-
-        if msg_type == EventType.completion.value:
-            future = self._pending.get(data.get("invocationId"))
-            if future and not future.done():
-                if data.get("error"):
-                    future.set_exception(
-                        resonite_exceptions.ResoniteHubException(data["error"])
+            case signalr.Invocation():
+                target_name = message.target
+                if target_name:
+                    target = self._find_target(target_name)
+                    if target is None:
+                        logging.debug(f"No EventTarget mapped for hub event {target_name!r}")
+                        return
+                    wants_cache = (
+                        self._cache_enabled
+                        and target is EventTarget.contactAddedOrUpdated
+                        and self._contacts_cache is not None
                     )
-                else:
-                    future.set_result(data.get("result"))
-            return
+                    if target in self._handlers or wants_cache:
+                        raw_args = message.arguments
 
-        if msg_type == EventType.close.value:
-            logging.error(f"Hub sent close: {data.get('error')}")
-            return
+                        _, arg_types = target.value
+                        deserialized_args = self._deserialize_args(raw_args, arg_types or [])
+
+                        if wants_cache and isinstance(deserialized_args[0], ResoniteContact):
+                            self._contacts_cache[deserialized_args[0].id] = deserialized_args[0]
+
+                        if target in self._handlers:
+                            try:
+                                handler = self._handlers[target]
+                                if asyncio.iscoroutinefunction(handler):
+                                    await handler(deserialized_args)
+                                else:
+                                    handler(deserialized_args)
+                            except Exception as e:
+                                logging.error(f"Event handler error for {target}: {e!r}")
+
+            case signalr.Completion():
+                future = self._pending.get(message.invocationId)
+                if future and not future.done():
+                    if message.error:
+                        future.set_exception(
+                            resonite_exceptions.ResoniteHubException(message.error)
+                        )
+                    else:
+                        future.set_result(message.result)
+                return
+
+            case signalr.Close():
+                logging.error(f"Hub sent close: {message.error}")
+                self._connected = False
+                return
+            case _:
+                logging.warning(f"Unhandled hub message: {message!r}")
 
     def _find_target(self, target_name: str) -> Optional[EventTarget]:
         """Find EventTarget enum by target name"""
@@ -163,20 +211,24 @@ class HubManager:
                     deserialized_obj = to_class(arg_types[i], raw_arg)
                     deserialized.append(deserialized_obj)
                 except Exception as e:
-                    logging.warning(f"Failed to deserialize arg {i} to {arg_types[i]}: {e}")
+                    logging.warning(f"Failed to deserialize arg {i} to {arg_types[i]}: {e!r}")
                     deserialized.append(raw_arg)
             else:
                 deserialized.append(raw_arg)
 
         return deserialized
 
+    async def _send_message(self, message: BaseModel):
+        await self._websocket.send(
+            message.model_dump_json(exclude_none=True) + signalr.RECORD_SEPARATOR
+        )
+
     async def send(self, target: str, *args):
         """ Invoke a hub function without waiting for a result (fire-and-forget).
         """
         if not self._connected:
             raise resonite_exceptions.ResoniteHubException("Hub is not connected")
-        frame = {"type": EventType.invocation.value, "target": target, "arguments": list(args)}
-        await self._websocket.send(json.dumps(frame) + self._eof)
+        await self._send_message(signalr.Invocation(target=target, arguments=list(args)))
 
     async def invoke(self, target: str, *args, timeout: float = 5.0):
         """ Invoke a hub function and wait for its completion result.
@@ -186,21 +238,62 @@ class HubManager:
         invocation_id = str(uuid4())
         future = asyncio.get_running_loop().create_future()
         self._pending[invocation_id] = future
-        frame = {
-            "type": EventType.invocation.value,
-            "invocationId": invocation_id,
-            "target": target,
-            "arguments": list(args),
-        }
         try:
-            await self._websocket.send(json.dumps(frame) + self._eof)
+            await self._send_message(
+                signalr.Invocation(
+                    target=target,
+                    arguments=list(args),
+                    invocationId=invocation_id
+                )
+            )
             return await asyncio.wait_for(future, timeout)
         except asyncio.TimeoutError:
             raise resonite_exceptions.ResoniteHubException(
                 f"{target} invocation timed out after {timeout}s"
             )
         finally:
-            self._pending.pop(invocation_id, None)
+            self._pending.pop(invocation_id, None)  
+
+    def _start_refresh_task(self):
+        if self._cache_refresh_interval is None or self._refresh_task is not None:
+            return
+        self._refresh_task = asyncio.create_task(self._refresh_contacts_loop())
+
+    async def _refresh_contacts_loop(self):
+        while True:
+            await asyncio.sleep(self._cache_refresh_interval)
+            try:
+                contacts = await self._fetch_contacts(timeout=5.0)
+                self._contacts_cache = {contact.id: contact for contact in contacts}
+            except Exception as e:
+                logging.warning(f"Contact cache refresh failed: {e!r}")
+
+    async def _fetch_contacts(self, timeout: float = 5.0) -> List[ResoniteContact]:
+        """ Fetch contact list over the hub.
+        """
+
+        result = await self.invoke("InitializeStatus", timeout=timeout)
+        raw_contacts = (result or {}).get("contacts")
+        if raw_contacts is None:
+            if self._client is None:
+                raise resonite_exceptions.ResoniteHubException(
+                    "InitializeStatus returned no contacts and no Client is "
+                    "attached for the REST fallback"
+                )
+            logging.warning("InitializeStatus returned no contacts - falling back to REST")
+            return await asyncio.to_thread(self._client.get_contacts, "rest")
+        return [to_class(ResoniteContact, contact) for contact in raw_contacts]
+
+    async def get_contacts(self, force: bool = False, timeout: float = 5.0) -> List[ResoniteContact]:
+        """ Get contact list from cache.
+        """
+        if self._cache_enabled and not force and self._contacts_cache is not None:
+            return list(self._contacts_cache.values())
+        contacts = await self._fetch_contacts(timeout)
+        if self._cache_enabled:
+            self._contacts_cache = {contact.id: contact for contact in contacts}
+            self._start_refresh_task()
+        return contacts
 
     async def add_contact(self, user_id: str, timeout: float = 5.0):
         """ Send a contact request to a user, or accept a pending one.
@@ -249,7 +342,7 @@ class HubManager:
                 "Contact operations need HubManager(client) with a logged-in Client"
             )
 
-        contacts = await asyncio.to_thread(self._client.getContacts)
+        contacts = await asyncio.to_thread(self._client.get_contacts, "rest")
         existing = next((c for c in contacts if c.id == user_id), None)
         if existing is not None:
             username = existing.contactUsername
