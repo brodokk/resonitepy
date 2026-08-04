@@ -893,7 +893,7 @@ class ResoniteHubUserStatus:
     """Whether the user is present at their device."""
     lastStatusChange: datetime
     """The timestamp of the last status change."""
-    hashSalt: str
+    hashSalt: Optional[str] = None
     """Salt used to hash the session ids in sessions."""
     appVersion: str
     """The version of the app broadcasting this status."""
