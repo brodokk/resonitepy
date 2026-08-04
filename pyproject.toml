@@ -22,7 +22,7 @@ websockets = "^16.1"
 
 [tool.poetry.group.dev.dependencies]
 pdoc3 = "^0.10.0"
-pytest = "^8.3.5"
+pytest = "^9.0.3"
 pytest-mock = "^3.14.0"
 pytest-cov = "^2.12.1"
 
