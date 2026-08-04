@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "resonitepy"
-version = "0.0.1"
+version = "0.0.2"
 description = "Unofficial Resonite API python library."
 authors = ["brodokk <brodokk@brodokk.space>"]
 readme = "README.md"
